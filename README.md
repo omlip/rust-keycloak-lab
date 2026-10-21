@@ -1,6 +1,14 @@
 # Olaninc — démonstration IAM
 
-Une SPA **Vue / TypeScript**, une API **Rust / Axum** et **Keycloak** pour démontrer l’authentification OIDC, les rôles et les opérations IAM natives. **Mailpit** capture tous les e-mails. Aucun thème Keycloak personnalisé, aucune base applicative et aucun endpoint d’administration IAM dans Rust.
+Une SPA **Vue / TypeScript**, une API **Rust / Axum** et **Keycloak** pour démontrer l’authentification OIDC, les rôles et les opérations IAM natives. **Mailpit** capture tous les e-mails. Le thème Login Keycloak reprend la palette Ni² par CSS, sans remplacement des formulaires natifs. Aucune base applicative et aucun endpoint d’administration IAM dans Rust.
+
+### Thème Login Ni²
+
+`keycloak/themes/ni2/login` hérite de `keycloak.v2` (Keycloak 26.8 / PatternFly 5). Il conserve les templates, scripts, erreurs et parcours natifs ; seuls les styles changent : bleu nuit, boutons bleus, fond gris clair et accent orange. Aucun logo officiel n’est ajouté et le nom du realm reste inchangé. Aucun thème Account, Administration ou e-mail n’est modifié.
+
+Le dossier est monté en lecture seule dans `/opt/keycloak/themes/ni2`. Les caches de thèmes sont désactivés dans cette configuration locale pour faciliter les ajustements CSS ; ce réglage n’est pas destiné à la production. Le thème couvre la connexion, les mots de passe oubliés/réinitialisés ou imposés, ainsi que la saisie/configuration OTP des parcours Login. Les écrans propres à la console Account restent natifs.
+
+Sur une installation vierge, l’import sélectionne automatiquement `ni2`. Sur un realm existant, choisir **Realm settings → Themes → Login theme → ni2 → Save**, sans supprimer les volumes. Pour revenir au thème natif, sélectionner `keycloak.v2` ; les comptes et sessions ne sont pas réinitialisés. Après un changement de version Keycloak, vérifier les styles, focus, erreurs, écrans mobiles et le QR code OTP.
 
 Un **catalogue fictif de services de datacenter** illustre les permissions : `users` et `admin` le consultent ; seul `admin` peut ajouter, modifier et supprimer les services. Le compte technique `catalog-loader`, avec le rôle dédié `catalog-seed`, peut uniquement charger les cinq services prédéfinis. Le catalogue est vide au démarrage et stocké uniquement en mémoire. Son cœur applicatif suit une architecture hexagonale légère.
 

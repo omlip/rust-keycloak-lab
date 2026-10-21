@@ -1,0 +1,88 @@
+/* Visual overrides only: all templates and authentication behavior are inherited
+   from Keycloak 26.8's keycloak.v2 login theme (PatternFly 5). */
+:root {
+    --ni2-navy: #21255a;
+    --ni2-blue: #0054a6;
+    --ni2-blue-hover: #004383;
+    --ni2-orange: #f47920;
+    --ni2-background: #ebebec;
+    --ni2-muted: #505269;
+    --ni2-control-border: #77798e;
+    --keycloak-card-top-color: var(--ni2-orange);
+    --pf-v5-global--primary-color--100: var(--ni2-blue);
+    --pf-v5-global--primary-color--200: var(--ni2-blue-hover);
+    --pf-v5-global--link--Color: var(--ni2-blue);
+    --pf-v5-global--link--Color--hover: var(--ni2-blue-hover);
+    --pf-v5-global--Color--100: var(--ni2-navy);
+    --pf-v5-global--Color--200: var(--ni2-muted);
+    --pf-v5-global--FontFamily--text: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --pf-v5-global--FontFamily--heading: var(--pf-v5-global--FontFamily--text);
+}
+
+.login-pf body {
+    background: var(--ni2-background);
+    color: var(--ni2-navy);
+}
+
+/* The native header keeps the realm's real name; no substitute brand/logo. */
+#kc-header-wrapper {
+    color: var(--ni2-navy) !important;
+    text-transform: none;
+    letter-spacing: -.035em;
+    font-weight: 750;
+}
+
+.pf-v5-c-login__main {
+    background: white;
+    border-radius: 1rem;
+    box-shadow: 0 16px 48px #21255a14;
+}
+
+.pf-v5-c-login__main-header {
+    border-radius: 1rem 1rem 0 0;
+}
+
+#kc-page-title {
+    color: var(--ni2-navy);
+}
+
+.pf-v5-c-button {
+    --pf-v5-c-button--BorderRadius: .65rem;
+    --pf-v5-c-button--m-primary--BackgroundColor: var(--ni2-blue);
+    --pf-v5-c-button--m-primary--hover--BackgroundColor: var(--ni2-blue-hover);
+    --pf-v5-c-button--m-primary--focus--BackgroundColor: var(--ni2-blue-hover);
+    --pf-v5-c-button--m-primary--active--BackgroundColor: var(--ni2-blue-hover);
+    --pf-v5-c-button--m-secondary--Color: var(--ni2-blue);
+    --pf-v5-c-button--m-secondary--BorderColor: var(--ni2-blue);
+    --pf-v5-c-button--m-control--Color: var(--ni2-navy);
+    --pf-v5-c-button--m-control--BorderColor: var(--ni2-control-border);
+}
+
+.pf-v5-c-button.pf-m-primary {
+    color: white;
+}
+
+.pf-v5-c-form-control {
+    --pf-v5-c-form-control--BorderColor: var(--ni2-control-border);
+    --pf-v5-c-form-control--BorderBottomColor: var(--ni2-control-border);
+    --pf-v5-c-form-control--hover--BorderBottomColor: var(--ni2-blue);
+    --pf-v5-c-form-control--focus--BorderBottomColor: var(--ni2-blue);
+    border-radius: .4rem;
+}
+
+/* Preserve native invalid/readonly/disabled states and error indicators.
+   A two-tone focus stays visible on both white and blue surfaces. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+    outline: 3px solid var(--ni2-navy);
+    outline-offset: 3px;
+    box-shadow: 0 0 0 3px white;
+}
+
+/* OTP QR codes remain unfiltered, on white, with their native dimensions. */
+.kc-qr-code img {
+    background: white;
+}

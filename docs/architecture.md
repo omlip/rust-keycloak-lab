@@ -157,7 +157,7 @@ Les boutons Vue utilisent les **Application Initiated Actions** : `keycloak.logi
 
 La navigation sécurisée affiche le catalogue à gauche et un menu de compte ☰ à droite, avec **Paramètres** et **Déconnexion**, sur ordinateur comme sur mobile. `/settings` regroupe les liens vers les fonctions natives de sécurité pour les deux rôles ; le lien vers la console d’administration n’apparaît que pour `admin`. La page et la navigation sont bleues pour `users`, mauves pour `admin`. Le retour des actions natives conserve la destination `/settings`. Les anciennes pages `/user` et `/admin` ne sont plus des écrans distincts : elles redirigent vers les paramètres, en conservant le contrôle `admin` sur l’ancienne URL `/admin`.
 
-La console de compte, la console d’administration, les formulaires, le flux OTP conditionnel natif et les e-mails utilisent tous les thèmes et comportements natifs de Keycloak. **Le theming Keycloak est hors périmètre.** Les couleurs bleue/violette ne concernent que Vue.
+Le thème Login `ni2`, monté en lecture seule depuis `keycloak/themes/ni2`, hérite de `keycloak.v2` et applique uniquement des surcharges CSS Ni² (PatternFly 5). Aucun template ou script natif n’est remplacé : connexion, mots de passe et OTP conservent leur comportement. Le thème reste commun à tous les rôles. La distinction bleu utilisateur / prune administrateur est réservée à Vue. Les consoles Account et Administration ainsi que les e-mails gardent leurs thèmes natifs. Les caches de thèmes sont désactivés uniquement pour le développement local.
 
 Les actions requises et flux d’authentification natifs sont ceux créés par Keycloak à l’import. Seul `UPDATE_PASSWORD` est imposé initialement aux deux comptes ; `CONFIGURE_TOTP` n’est imposé à personne.
 
@@ -172,9 +172,9 @@ Keycloak envoie son SMTP à `mailpit:1025`, sans authentification ni TLS dans le
 - Les identifiants humains initiaux sont publics et réservés à l’environnement local. Les fichiers d’initialisation et Docker connaissent ces valeurs ; l’application Vue/Rust ne les reçoit pas. Le secret technique `catalog-loader`, généré séparément par Keycloak, n’est pas inscrit dans ces fichiers et reste dans un fichier local protégé pour l’outil appelant.
 - La validation locale d’un JWT ne vérifie pas à chaque requête la session Keycloak : la révocation et les changements de rôles sont observés au renouvellement ou à l’expiration du jeton, pas immédiatement.
 - Les tests backend utilisent de vraies signatures et un faux serveur de clés ; ils ne prouvent pas à eux seuls que l’import Keycloak est correct. Le guide de scénarios couvre cette intégration.
-- Pas d’inscription libre, de politique OTP obligatoire, de formulaires IAM personnalisés, de thème personnalisé, de BFF, de base applicative, d’introspection distante ou de déploiement public.
+- Pas d’inscription libre, de politique OTP obligatoire, de formulaires IAM personnalisés, de refonte des templates, de BFF, de base applicative, d’introspection distante ou de déploiement public.
 
-Évolutions possibles après V1 : tests navigateur pérennes, inscription native Keycloak avec rôle par défaut maîtrisé, thème sur demande explicite et durcissement pour un véritable environnement cible. Aucune de ces évolutions n’est activée implicitement.
+Évolutions possibles après V1 : tests navigateur pérennes, inscription native Keycloak avec rôle par défaut maîtrisé, personnalisation de la console Account et durcissement pour un véritable environnement cible. Aucune de ces évolutions n’est activée implicitement.
 
 ## 9. Catalogue : une architecture hexagonale légère
 

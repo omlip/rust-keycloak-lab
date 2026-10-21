@@ -3,7 +3,7 @@ name: olaninc-iam-demo
 services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.8.1
-    command: ["start-dev", "--import-realm"]
+    command: ["start-dev", "--import-realm", "--spi-theme--static-max-age=-1", "--spi-theme--cache-themes=false", "--spi-theme--cache-templates=false"]
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: bootstrap-admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: Bootstrap-local-only-2026!
@@ -16,6 +16,7 @@ services:
     volumes:
       - keycloak-data:/opt/keycloak/data
       - ./keycloak/olaninc-realm.json:/opt/keycloak/data/import/olaninc-realm.json:ro
+      - ./keycloak/themes/ni2:/opt/keycloak/themes/ni2:ro
     depends_on:
       mailpit:
         condition: service_healthy
