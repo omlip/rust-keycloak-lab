@@ -17,6 +17,7 @@ services:
       - keycloak-data:/opt/keycloak/data
       - ./keycloak/olaninc-realm.json:/opt/keycloak/data/import/olaninc-realm.json:ro
       - ./keycloak/themes/ni2:/opt/keycloak/themes/ni2:ro
+      - ./keycloak/truststores:/opt/keycloak/conf/truststores:ro
     depends_on:
       mailpit:
         condition: service_healthy
@@ -74,6 +75,26 @@ services:
       timeout: 5s
       retries: 5
 
+  ad:
+    profiles: ["ad"]
+    build: ./ad
+    hostname: dc
+    domainname: ad.olaninc.test
+    volumes:
+      - samba-data:/var/lib/samba
+      - ./.secrets/ad-credentials.json:/run/secrets/ad-credentials.json:ro
+    networks:
+      default:
+        aliases:
+          - dc.ad.olaninc.test
+    healthcheck:
+      test: ["CMD", "python3", "/opt/ad/healthcheck.py"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
+
 volumes:
   keycloak-data:
   mailpit-data:
+  samba-data:

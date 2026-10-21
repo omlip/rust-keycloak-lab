@@ -24,6 +24,41 @@ Les ports navigateur peuvent être adaptés pour Vue et Mailpit ; ces exemples u
 
 Rust n’utilise pas de base de données : le catalogue est uniquement en mémoire et disparaît au redémarrage du backend. Les données IAM de Keycloak et les messages Mailpit sont persistés dans deux volumes Docker distincts.
 
+### Fédération Active Directory optionnelle
+
+Le profil Compose `ad` ajoute Samba AD DC, construit à partir de Debian et de
+ses paquets Samba (pas une image tierce opaque). Son volume `samba-data` conserve
+le domaine `ad.olaninc.test`, les utilisateurs, groupes, mots de passe et clés
+TLS. Le conteneur n’est pas privilégié et ne publie aucun port sur le Mac.
+
+```text
+Vue ── OIDC/PKCE ──→ Keycloak ── LDAPS + compte de lecture ──→ Samba AD
+                         └── groupes AD → groupes Keycloak → rôles JWT
+Rust ←── Bearer JWT émis par Keycloak, quelle que soit l’origine du compte
+```
+
+`scripts/configure-ad.py` initialise les secrets locaux et le domaine, monte
+l’autorité publique Samba dans le truststore Keycloak, puis utilise le CLI
+officiel pour configurer le fournisseur LDAP en lecture seule. Les mots de passe
+sont vérifiés dans l’annuaire ; seuls les profils sont importés. `objectGUID`
+relie chaque profil à son entrée AD. Aucun fournisseur n’est ajouté au JSON du
+realm avec un secret prédéfini : le script est rejouable sur une installation
+vierge ou existante, sans remplacement des comptes locaux.
+
+Les quatre comptes `user1` à `user4` appartiennent à `catalog-users` et obtiennent
+`users`. `admin1` appartient à `catalog-admins` et obtient uniquement le rôle
+applicatif `admin`, pas `realm-management:realm-admin` ni un privilège de domaine.
+Les groupes sont importés sous `/AD` et leur membership est lu depuis LDAP,
+sans cache utilisateur pour cette démo. Un changement de groupe se reflète dans
+les nouveaux jetons, pas dans les JWT déjà émis. L’API continue à valider les
+mêmes rôles et la même audience : aucun code LDAP dans Vue ou Rust.
+
+Ce scénario démontre la fédération d’un annuaire **compatible AD**, pas une
+installation Microsoft, une jonction Windows, le SSO Kerberos ou des GPO.
+L’annuaire en lecture seule ne permet pas les modifications de mots de passe
+ou d’attributs LDAP depuis les écrans IAM. Les comptes locaux restent utilisables
+pour ces parcours. Voir [le guide de démonstration](active-directory.md).
+
 ## 2. Authorization Code Flow avec PKCE
 
 1. La SPA appelle `keycloak.login()` après un clic.

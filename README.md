@@ -46,6 +46,21 @@ Utiliser **`localhost`**, pas `127.0.0.1`, dans le navigateur : issuer, origines
 
 Le compte technique initial est distinct : `bootstrap-admin` / `Bootstrap-local-only-2026!`, dans le realm **master**, console http://localhost:8081/admin/master/console/. Ne pas l’utiliser dans la SPA. Ces identifiants sont uniquement destinés à cette installation locale et ne sont jamais transmis aux conteneurs Vue ou Rust.
 
+### Option : utilisateurs Active Directory via Samba
+
+Une démonstration **compatible Active Directory** est disponible avec Samba AD DC
+dans Docker (profil `ad`, sans ports publiés ni conteneur privilégié). Après le
+démarrage normal, exécuter `python3 scripts/configure-ad.py` : le script crée
+`user1` à `user4` avec le rôle `users` et `admin1` avec le rôle applicatif `admin`,
+via des groupes AD et une fédération LDAPS en lecture seule. Les comptes locaux
+restent conservés. Les mots de passe générés sont dans
+`.secrets/ad-credentials.json`, ignoré par Git. `admin1` n’a aucun droit
+d’administration Keycloak ou du domaine AD.
+
+Voir [le guide Active Directory](docs/active-directory.md) pour le scénario,
+les limites de la lecture seule, les redémarrages avec `--profile ad`, la
+persistance et les vérifications `python3 scripts/verify-ad.py`.
+
 ## Scénarios de démonstration
 
 ### 1. Utilisateur standard
