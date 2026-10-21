@@ -16,6 +16,8 @@ nav a { color: var(--muted); text-decoration: none; }
 nav a.router-link-active { color: var(--accent); font-weight: 700; }
 .secure-navigation { width: 100%; justify-content: space-between; flex-wrap: nowrap; }
 .secure-navigation > a { font-weight: 700; }
+.catalog-link { display: inline-flex; align-items: center; gap: .65rem; }
+.catalog-link img { flex-shrink: 0; }
 .account-menu { position: relative; flex-shrink: 0; margin-left: auto; }
 .account-menu-toggle { padding: .65rem; min-width: 44px; min-height: 44px; }
 .account-menu-panel { position: absolute; right: 0; top: calc(100% + .6rem); z-index: 20; width: 200px; max-width: calc(100vw - 2rem); padding: .4rem; border: 1px solid var(--border); border-radius: .75rem; background: white; box-shadow: 0 12px 32px #21255a1a; }
@@ -29,7 +31,7 @@ h2 { font-size: 1.4rem; }
 .hero { width: 100%; max-width: 740px; margin: auto; padding: clamp(1.5rem, 5vw, 3.5rem); text-align: center; background: white; border: 1px solid var(--border); border-top: 5px solid var(--brand-orange); border-radius: 1.5rem; box-shadow: 0 16px 48px #21255a08; }
 .hero h1 { font-size: clamp(2.2rem, 5vw, 3.5rem); }
 .hero .lead { margin: 0 auto 1.5rem; }
-.welcome-icon { display: grid; place-items: center; width: 80px; height: 80px; margin: 0 auto 1.8rem; border-radius: 1.2rem; color: var(--ink); background: var(--brand-orange); }
+.welcome-icon { display: grid; place-items: center; width: 80px; height: 80px; margin: 0 auto 1.8rem; border-radius: 1.2rem; background: var(--background); }
 .eyebrow { font-size: .75rem; font-weight: 750; letter-spacing: .12em; color: var(--muted); }
 .lead { font-size: 1.15rem; color: var(--muted); max-width: 650px; }
 .hero button { margin-top: 1rem; }

@@ -4,7 +4,9 @@ Une SPA **Vue / TypeScript**, une API **Rust / Axum** et **Keycloak** pour démo
 
 ### Thème Login Ni²
 
-`keycloak/themes/ni2/login` hérite de `keycloak.v2` (Keycloak 26.8 / PatternFly 5). Il conserve les templates, scripts, erreurs et parcours natifs ; seuls les styles changent : bleu nuit, boutons bleus, fond gris clair et accent orange. Aucun logo officiel n’est ajouté et le nom du realm reste inchangé. Aucun thème Account, Administration ou e-mail n’est modifié.
+`keycloak/themes/ni2/login` hérite de `keycloak.v2` (Keycloak 26.8 / PatternFly 5). Il conserve les templates, scripts, erreurs et parcours natifs ; seuls les styles changent : bleu nuit, boutons bleus, fond gris clair et accent orange. Le nom du realm reste inchangé. Aucun thème Account, Administration ou e-mail n’est modifié.
+
+Le symbole de démonstration représente deux baies de serveurs bleu nuit avec des accents orange ; ce n’est pas le logo officiel Ni². Le même SVG est utilisé comme logo et favicon dans Vue et le thème Login. Les fichiers `frontend/public/logo.svg` et `keycloak/themes/ni2/login/resources/img/logo.svg` doivent rester identiques. Le logo est décoratif à côté des titres/libellés existants, sans ajouter de texte redondant aux lecteurs d’écran.
 
 Le dossier est monté en lecture seule dans `/opt/keycloak/themes/ni2`. Les caches de thèmes sont désactivés dans cette configuration locale pour faciliter les ajustements CSS ; ce réglage n’est pas destiné à la production. Le thème couvre la connexion, les mots de passe oubliés/réinitialisés ou imposés, ainsi que la saisie/configuration OTP des parcours Login. Les écrans propres à la console Account restent natifs.
 

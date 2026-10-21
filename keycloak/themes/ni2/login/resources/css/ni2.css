@@ -24,12 +24,24 @@
     color: var(--ni2-navy);
 }
 
-/* The native header keeps the realm's real name; no substitute brand/logo. */
+/* Decorative demo symbol; the native header keeps the realm's real name. */
 #kc-header-wrapper {
     color: var(--ni2-navy) !important;
     text-transform: none;
     letter-spacing: -.035em;
     font-weight: 750;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .75rem;
+}
+
+#kc-header-wrapper::before {
+    content: "";
+    width: 64px;
+    height: 64px;
+    flex-shrink: 0;
+    background: url('../img/logo.svg') center / contain no-repeat;
 }
 
 .pf-v5-c-login__main {

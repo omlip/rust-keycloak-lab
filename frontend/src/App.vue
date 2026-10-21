@@ -19,7 +19,7 @@ watch(() => [session.authenticated, session.roles.join(',')], () => {
   <div class="shell">
     <header v-if="session.authenticated" class="topbar" :class="hasRole('admin') ? 'admin-space' : 'user-space'">
       <nav class="secure-navigation" aria-label="Navigation principale">
-        <RouterLink v-if="canAccessUser()" to="/catalog">Catalogue de services</RouterLink>
+        <RouterLink v-if="canAccessUser()" to="/catalog" class="catalog-link"><img src="/logo.svg" width="36" height="36" alt="" />Catalogue de services</RouterLink>
         <AccountMenu />
       </nav>
     </header>

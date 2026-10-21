@@ -10,11 +10,7 @@ function connectToCatalog() {
 <template>
   <section class="hero" aria-labelledby="welcome-title">
     <div class="welcome-icon" aria-hidden="true">
-      <svg viewBox="0 0 48 48" width="48" height="48" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="8" y="7" width="32" height="14" rx="3" />
-        <rect x="8" y="27" width="32" height="14" rx="3" />
-        <path d="M14 14h2m5 0h13M14 34h2m5 0h13M24 21v6" />
-      </svg>
+      <img src="/logo.svg" width="64" height="64" alt="" />
     </div>
     <h1 id="welcome-title">Catalogue de services</h1>
     <p class="lead">Connecte-toi avec Keycloak pour découvrir le catalogue de services.</p>
