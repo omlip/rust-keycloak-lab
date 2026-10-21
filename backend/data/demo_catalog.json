@@ -1,0 +1,32 @@
+[
+  {
+    "name": "Machine virtuelle",
+    "category": "compute",
+    "description": "VM avec 2 vCPU, 4 Go de RAM et 80 Go de SSD.",
+    "monthly_price_cents": 2500
+  },
+  {
+    "name": "Serveur dédié",
+    "category": "compute",
+    "description": "Serveur physique avec 16 cœurs et 64 Go de RAM.",
+    "monthly_price_cents": 18000
+  },
+  {
+    "name": "Stockage objet",
+    "category": "storage",
+    "description": "Forfait de 1 To de stockage compatible S3 pour fichiers et archives.",
+    "monthly_price_cents": 1000
+  },
+  {
+    "name": "Sauvegarde managée",
+    "category": "backup",
+    "description": "Sauvegarde quotidienne avec conservation de 30 jours.",
+    "monthly_price_cents": 2000
+  },
+  {
+    "name": "Hébergement en baie",
+    "category": "hosting",
+    "description": "Emplacement 1U avec alimentation et connexion réseau.",
+    "monthly_price_cents": 7500
+  }
+]
