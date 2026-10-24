@@ -44,7 +44,7 @@ impl ServiceInput {
 }
 
 #[derive(Serialize)]
-struct ServiceOutput {
+pub(crate) struct ServiceOutput {
     id: u64,
     name: String,
     category: &'static str,
@@ -71,7 +71,7 @@ async fn list(
     claims.require_any_role(&["users", "admin"])?;
     Ok(Json(
         catalog
-            .list()
+            .list(&claims.actor())?
             .into_iter()
             .map(ServiceOutput::from)
             .collect(),
@@ -84,7 +84,7 @@ async fn find(
     Path(id): Path<u64>,
 ) -> Result<Json<ServiceOutput>, HttpError> {
     claims.require_any_role(&["users", "admin"])?;
-    Ok(Json(catalog.find(id)?.into()))
+    Ok(Json(catalog.find(&claims.actor(), id)?.into()))
 }
 
 async fn create(
@@ -96,7 +96,7 @@ async fn create(
     let input = body.map_err(|_| HttpError::InvalidBody)?.0;
     Ok((
         StatusCode::CREATED,
-        Json(catalog.create(input.into_draft()?).into()),
+        Json(catalog.create(&claims.actor(), input.into_draft()?)?.into()),
     ))
 }
 
@@ -108,7 +108,11 @@ async fn update(
 ) -> Result<Json<ServiceOutput>, HttpError> {
     claims.require_any_role(&["admin"])?;
     let input = body.map_err(|_| HttpError::InvalidBody)?.0;
-    Ok(Json(catalog.update(id, input.into_draft()?)?.into()))
+    Ok(Json(
+        catalog
+            .update(&claims.actor(), id, input.into_draft()?)?
+            .into(),
+    ))
 }
 
 async fn delete(
@@ -117,7 +121,7 @@ async fn delete(
     Path(id): Path<u64>,
 ) -> Result<StatusCode, HttpError> {
     claims.require_any_role(&["admin"])?;
-    catalog.delete(id)?;
+    catalog.delete(&claims.actor(), id)?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -130,7 +134,7 @@ async fn seed(
         tracing::error!(%error, "Catalogue de démonstration illisible");
         HttpError::InvalidSeed
     })?;
-    let count = catalog.replace_all(entries);
+    let count = catalog.replace_all(&claims.actor(), entries)?;
     Ok(Json(serde_json::json!({ "count": count })))
 }
 
@@ -158,6 +162,9 @@ impl IntoResponse for HttpError {
     fn into_response(self) -> Response {
         let (status, message) = match self {
             Self::Security(error) => return error.into_response(),
+            Self::Catalog(CatalogError::PermissionDenied) => {
+                return ApiError::Forbidden.into_response();
+            }
             Self::Catalog(CatalogError::ServiceNotFound) => {
                 (StatusCode::NOT_FOUND, "Service introuvable")
             }

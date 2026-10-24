@@ -4,6 +4,7 @@ import HomeView from './views/HomeView.vue';
 import SettingsView from './views/SettingsView.vue';
 import DeniedView from './views/DeniedView.vue';
 import CatalogView from './views/CatalogView.vue';
+import SelectionsView from './views/SelectionsView.vue';
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -14,6 +15,8 @@ export const router = createRouter({
     { path: '/user', name: 'user', component: SettingsView, meta: { requiresAuth: true } },
     { path: '/admin', name: 'admin', component: SettingsView, meta: { requiresAuth: true } },
     { path: '/catalog', name: 'catalog', component: CatalogView, meta: { requiresAuth: true } },
+    { path: '/selections', name: 'selections', component: SelectionsView, meta: { requiresAuth: true } },
+    { path: '/selections/:id', name: 'selection', component: SelectionsView, meta: { requiresAuth: true } },
     { path: '/denied', name: 'denied', component: DeniedView },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],

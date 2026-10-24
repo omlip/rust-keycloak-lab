@@ -1,0 +1,9 @@
+.git/
+.secrets/
+.idea/
+**/target/
+**/node_modules/
+frontend/dist/
+keycloak/truststores/*.crt
+**/__pycache__/
+*.log

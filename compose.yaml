@@ -75,6 +75,37 @@ services:
       timeout: 5s
       retries: 5
 
+  cost-monitor:
+    profiles: ["cost-monitor"]
+    build:
+      context: .
+      dockerfile: cost-monitor/Dockerfile
+    environment:
+      BIND_ADDRESS: 0.0.0.0:8082
+      PUBLIC_ORIGIN: http://localhost:8082
+      OIDC_ISSUER: http://localhost:8081/realms/olaninc
+      OIDC_INTERNAL_ISSUER: http://keycloak:8080/realms/olaninc
+      API_BASE: http://backend:3000
+      LOGIN_CLIENT_SECRET_FILE: /run/secrets/cost-monitor-login.secret
+      CATALOG_CLIENT_SECRET_FILE: /run/secrets/cost-monitor.secret
+    volumes:
+      - ./.secrets/cost-monitor.secret:/run/secrets/cost-monitor.secret:ro
+      - ./.secrets/cost-monitor-login.secret:/run/secrets/cost-monitor-login.secret:ro
+    tmpfs:
+      - /run/cost-monitor
+    ports:
+      - "127.0.0.1:8082:8082"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8082/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   ad:
     profiles: ["ad"]
     build: ./ad

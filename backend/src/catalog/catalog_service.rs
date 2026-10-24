@@ -2,6 +2,7 @@ use super::{
     catalog_repository::CatalogRepository,
     domain::{DatacenterService, ServiceDraft},
 };
+use crate::access::{Actor, Permission};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -12,6 +13,7 @@ pub struct CatalogService {
 #[derive(Debug, PartialEq, Eq)]
 pub enum CatalogError {
     ServiceNotFound,
+    PermissionDenied,
 }
 
 impl CatalogService {
@@ -19,27 +21,41 @@ impl CatalogService {
         Self { repository }
     }
 
-    pub fn list(&self) -> Vec<DatacenterService> {
-        self.repository.list()
+    pub fn list(&self, actor: &Actor) -> Result<Vec<DatacenterService>, CatalogError> {
+        Self::require(actor, Permission::CatalogRead)?;
+        Ok(self.repository.list())
     }
 
-    pub fn find(&self, id: u64) -> Result<DatacenterService, CatalogError> {
+    pub fn find(&self, actor: &Actor, id: u64) -> Result<DatacenterService, CatalogError> {
+        Self::require(actor, Permission::CatalogRead)?;
         self.repository
             .find(id)
             .ok_or(CatalogError::ServiceNotFound)
     }
 
-    pub fn create(&self, data: ServiceDraft) -> DatacenterService {
-        self.repository.create(data)
+    pub fn create(
+        &self,
+        actor: &Actor,
+        data: ServiceDraft,
+    ) -> Result<DatacenterService, CatalogError> {
+        Self::require(actor, Permission::CatalogWrite)?;
+        Ok(self.repository.create(data))
     }
 
-    pub fn update(&self, id: u64, data: ServiceDraft) -> Result<DatacenterService, CatalogError> {
+    pub fn update(
+        &self,
+        actor: &Actor,
+        id: u64,
+        data: ServiceDraft,
+    ) -> Result<DatacenterService, CatalogError> {
+        Self::require(actor, Permission::CatalogWrite)?;
         self.repository
             .update(id, data)
             .ok_or(CatalogError::ServiceNotFound)
     }
 
-    pub fn delete(&self, id: u64) -> Result<(), CatalogError> {
+    pub fn delete(&self, actor: &Actor, id: u64) -> Result<(), CatalogError> {
+        Self::require(actor, Permission::CatalogWrite)?;
         if self.repository.delete(id) {
             Ok(())
         } else {
@@ -47,7 +63,20 @@ impl CatalogService {
         }
     }
 
-    pub fn replace_all(&self, services: Vec<ServiceDraft>) -> usize {
-        self.repository.replace_all(services)
+    pub fn replace_all(
+        &self,
+        actor: &Actor,
+        services: Vec<ServiceDraft>,
+    ) -> Result<usize, CatalogError> {
+        Self::require(actor, Permission::CatalogSeed)?;
+        Ok(self.repository.replace_all(services))
+    }
+
+    fn require(actor: &Actor, permission: Permission) -> Result<(), CatalogError> {
+        if actor.permits(permission) {
+            Ok(())
+        } else {
+            Err(CatalogError::PermissionDenied)
+        }
     }
 }

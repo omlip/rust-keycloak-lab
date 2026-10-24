@@ -48,12 +48,19 @@ pub fn signing_material() -> &'static SigningMaterial {
 }
 
 pub fn claims(roles: &[&str]) -> Value {
+    claims_for("demo-subject", roles)
+}
+
+pub fn claims_for(subject: &str, roles: &[&str]) -> Value {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs();
+    let machine = roles.contains(&"catalog-seed");
     json!({
-        "sub": "demo-subject", "iss": ISSUER, "aud": AUDIENCE,
+        "sub": subject, "iss": ISSUER, "aud": AUDIENCE,
+        "azp": if machine { "catalog-loader" } else { "olaninc-spa" },
+        "scope": if machine { "catalog:seed" } else { "catalog:read catalog:write selections:read selections:write" },
         "exp": now + 300, "iat": now, "typ": "Bearer",
         "realm_access": { "roles": roles }
     })

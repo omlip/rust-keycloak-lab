@@ -95,6 +95,7 @@ Un rechargement perd les jetons en mémoire. Le `check-sso` silencieux tente de 
 - Client public OIDC, Authorization Code Flow, PKCE S256.
 - Origine autorisée : celle de la SPA ; seuls les échanges navigateur → Keycloak nécessitent ce CORS.
 - Scopes par défaut `basic` (notamment `sub`), `profile`, `email` et `web-origins`.
+- Scopes métier `catalog:read`, `catalog:write`, `selections:read` et `selections:write` ; ils ne remplacent pas les contrôles de rôle et de propriété.
 - `fullScopeAllowed: false` et scope mapping explicite des rôles `users` et `admin`.
 - Mapper d’audience explicite vers `olaninc-api`, uniquement dans l’access token.
 - Mapper de rôles de realm vers `realm_access.roles`, uniquement dans l’access token.
@@ -229,7 +230,7 @@ catalog_service.rs                  Cas d’usage, types du domaine
 CatalogRepository                  Port sortant défini côté cœur
        ▲
        │ implémenté par
-in_memory_repository.rs             Adaptateur sortant : collection et verrou
+storage/in_memory_store.rs          Adaptateur sortant : collection et verrou
 ```
 
 ### Rôles des fichiers
@@ -239,17 +240,20 @@ in_memory_repository.rs             Adaptateur sortant : collection et verrou
 | `domain.rs` | Types `DatacenterService`, `ServiceDraft` et cinq catégories ; aucune dépendance à Axum, Serde, JWT ou Keycloak |
 | `catalog_service.rs` | Lister, consulter, créer, modifier, supprimer et remplacer ; dépend uniquement du domaine et du port |
 | `catalog_repository.rs` | Trait `CatalogRepository`, contrat de stockage synchrone `Send + Sync` |
-| `in_memory_repository.rs` | Implémentation avec `BTreeMap`, compteur d’identifiants et `Mutex` ; liste ordonnée par identifiant |
 | `catalog_http.rs` | Routes Axum, DTO JSON, contrôles de rôles et conversion des erreurs métier en HTTP |
 | `demo_catalog.rs` | Adaptateur de lecture du JSON prédéfini embarqué via `include_str!` |
 
-`backend/src/catalog.rs` déclare les modules. `main.rs` construit une instance du repository en mémoire, l’injecte dans `CatalogService` et appelle `app_with_catalog`. `app(auth)` reste disponible comme constructeur pratique avec un stockage neuf, notamment pour les tests existants.
+`backend/src/catalog.rs` déclare les modules. `main.rs` appelle `app(auth)`, qui
+construit un `InMemoryStore` partagé par les services catalogue et sélections,
+puis appelle `app_with_services`. L’adaptateur dans `backend/src/storage/`
+implémente leurs deux ports avec des `BTreeMap`, compteurs et un même `Mutex`.
+Chaque construction de l’application commence avec un stockage neuf.
 
 Le repository **implémente** le port dont dépend le service applicatif. Remplacer la mémoire par un autre stockage ne doit pas imposer de changement au domaine ni aux handlers. Il n’y a pas de trait par cas d’usage : les méthodes du service constituent son interface d’entrée.
 
 ### Sécurité à la frontière HTTP
 
-Les routes du catalogue passent toutes par le middleware JWT existant. Après authentification, l’adaptateur HTTP applique les rôles : `users` ou `admin` pour les lectures, `admin` pour le CRUD, et exclusivement `catalog-seed` pour le chargement intégral. Le domaine et le service applicatif ne connaissent pas les claims Keycloak. Ils ne doivent donc pas être exposés par un nouvel adaptateur sans y appliquer la politique d’autorisation correspondante.
+Les routes du catalogue passent toutes par le middleware JWT existant. Après authentification, l’adaptateur HTTP applique les rôles : `users` ou `admin` pour les lectures, `admin` pour le CRUD, et exclusivement `catalog-seed` pour le chargement intégral. Il traduit les claims en `Actor` du cœur, qui contient l’identité et les capacités résultant de l’intersection rôles/scopes/plafond client. Le service applicatif exige aussi la capacité correspondant à l’opération ; un nouvel adaptateur ne peut pas contourner cette vérification en appelant directement le service. Le domaine et les services ne connaissent ni JWT ni Keycloak.
 
 Les boutons Vue sont uniquement une aide visuelle, pas la protection réelle. Les erreurs métier (`ServiceNotFound`) n’ont pas de code HTTP dans le cœur ; l’adaptateur les convertit en `404`. Les corps JSON incompatibles et catégories inconnues donnent `400`, sans ajouter de règles métier de longueur ou d’unicité.
 
@@ -262,3 +266,135 @@ Le backend démarre vide. Seul `POST /api/catalog/seed`, avec un jeton portant `
 Le prix est un entier de centimes dans le domaine et l’API. Vue le convertit pour le formulaire et l’affiche en euros. La page `/catalog` est commune : consultation pour tous les comptes applicatifs, formulaire d’ajout/modification dans la page et suppression avec confirmation pour les administrateurs. Le catalogue se charge à l’ouverture et après chaque modification locale. Les autres sessions voient les changements en quittant puis en rouvrant le catalogue ; aucun bouton d’actualisation ni mécanisme temps réel n’est ajouté.
 
 Les tests applicatifs s’exécutent sans HTTP ni JWT ; les tests de l’adaptateur REST utilisent le même serveur JWKS local que les tests de sécurité. Un nouveau repository représente un redémarrage et doit toujours commencer vide. Le stockage en mémoire ne fournit ni durabilité, ni synchronisation entre plusieurs processus : c’est un choix explicite de démonstration.
+
+## 10. Sélections personnelles : autorisation dans le cœur
+
+Une sélection possède un nom, un propriétaire immuable (`OwnerId`) et un ensemble
+d’identifiants de services sans doublons (`BTreeSet`). Le domaine définit
+`Selection::ensure_owner`. Le service applicatif l’applique avant toute lecture
+individuelle, modification ou suppression, et filtre les listes avec cette même
+règle. Il ne connaît ni JWT, ni HTTP, ni rôle administrateur.
+
+```text
+HTTP : JWT validé → rôle users/admin → Actor (sub + capacités)
+                            ↓
+SelectionService : charger → règle du domaine → lire/modifier
+                            ↓
+SelectionRepository : instantanés cohérents et écritures conditionnelles
+                            ↑
+InMemoryStore : même état partagé pour catalogue et sélections
+```
+
+L’adaptateur HTTP contrôle les rôles, décode les DTO et convertit les erreurs.
+Le service exige `SelectionsRead` ou `SelectionsWrite` avant l’opération puis
+applique la règle de propriété avec `actor.owner()`. Une capacité absente donne
+`403`, y compris pour un utilisateur administrateur représenté par Cost Monitor.
+`AccessDenied` et `NotFound` deviennent le même `404` pour ne pas révéler une
+sélection étrangère. Le corps JSON ne peut fixer ni transférer la propriété.
+`admin` n’accorde aucune exception. Le `sub` suffit dans ce resource server qui
+n’accepte qu’un issuer configuré ; une extension multi-issuer demanderait une
+identité composée de l’issuer et du sujet.
+
+Le port fournit un instantané de la sélection et du catalogue, accompagné de
+versions. Après autorisation et modification par le cœur, la sauvegarde compare
+atomiquement les versions de la sélection et du catalogue. En cas de conflit,
+le service relit et réapplique la règle, avec huit tentatives maximum, puis une
+erreur de conflit (`409`). Il n’y a aucun `.await` sous le verrou.
+
+La suppression d’un service retire ses références dans le même état verrouillé,
+comme une contrainte référentielle en base. Le seed nettoie toutes les anciennes
+références. Une sauvegarde périmée ne peut ni les réintroduire, ni annuler une
+modification concurrente. Les propriétaires restent immuables. **Ces garanties
+de stockage ne remplacent pas la règle d’autorisation métier.** Un futur adapter
+de base devra respecter le même contrat (transactions et écritures
+conditionnelles), pas réinventer la politique d’accès.
+
+Les prix ne sont pas copiés dans la sélection. Le service construit les détails
+et le total avec un seul instantané, en centimes et avec `checked_add`. Un
+dépassement donne une erreur explicite (`422`) ; une addition invalide n’est pas
+enregistrée. Pas de quantité, de partage, de réservation ou de provisionnement.
+
+Les tests du cœur s’exécutent sans serveur : un repository volontairement non
+filtrant démontre que l’autorisation ne dépend pas de l’adaptateur. Les tests
+HTTP signent des JWT avec plusieurs `sub`, à rôles identiques ou administrateurs,
+et exercent chaque opération contre une sélection étrangère. Les comptes locaux
+et AD suivent le même chemin. Keycloak Authorization Services, délégation à une
+autre application et offline tokens sont traités séparément ci-dessous.
+
+## 11. Cost Monitor : login applicatif et délégation catalogue distincts
+
+Cost Monitor est un serveur Axum distinct, avec des pages HTML rendues côté
+serveur et une session opaque dans le navigateur. Son premier client Keycloak,
+`cost-monitor-login`, authentifie uniquement l’utilisateur (`openid profile`,
+sans audience API ni offline). Ses jetons sont validés puis abandonnés : la
+session locale ne conserve que l’identité. Le tableau de bord est utilisable
+sans connexion catalogue.
+
+Le bouton **Connecter mon catalogue** lance un second parcours avec le client
+`cost-monitor`, consentement de lecture et `offline_access`. Cost Monitor ne lit
+jamais le repository des sélections : il appelle leur API avec ce second access
+token. Les réponses restent filtrées par la règle métier de propriété.
+
+```text
+Navigateur ── cookie de session opaque ──→ Cost Monitor :8082
+    │                                        │
+    ├── login Cost Monitor ──────────────→ Keycloak (cost-monitor-login)
+    └── consentement catalogue ─────────→ Keycloak (cost-monitor)
+Cost Monitor ── deux codes/PKCE/secrets distincts ──┘
+Cost Monitor ── offline token catalogue → access token ──┘
+Cost Monitor ── access token utilisateur ──→ API Rust /api/selections
+```
+
+Le module OIDC s’appuie sur `openidconnect` pour le protocole et la validation
+des ID tokens. Le module `sessions` conserve uniquement les identités, CSRF et
+délais des sessions navigateur. Le module `integrations` conserve séparément
+les connexions catalogue, indexées par **issuer + sub**, sans dépendre d’une
+session. Chaque compte possède un verrou de renouvellement commun à toutes ses
+sessions, ainsi qu’un nonce, ses jetons, une expiration d’access token et un
+compteur. Les deux stockages restent bornés et en mémoire. La fermeture ou
+l’expiration d’une session ne supprime pas l’intégration : une nouvelle session
+du même compte la retrouve, mais un autre compte ne peut pas la consulter.
+Les deux secrets techniques viennent de fichiers protégés,
+jamais du navigateur. L’adaptateur web gère cookies, CSRF, état OIDC et affichage.
+
+Les callbacks et cookies temporaires des deux parcours sont distincts. Le
+retour catalogue doit retrouver la session locale qui l’a initié et le même
+issuer et `sub` que le login applicatif. La comparaison est portée par les modèles
+de session et d’intégration, pas uniquement par le handler HTTP. Un compte
+différent est refusé sans changer le login ou conserver ses jetons. Une génération
+commune au compte est vérifiée avant et après l’échange réseau : une suppression
+catalogue dans une session empêche un ancien callback d’une autre session de la
+recréer. La session initiatrice doit aussi être encore valide : un logout annule
+ses tentatives, sans effacer une intégration précédemment établie. Les générations
+des emplacements ne sont pas recyclées pendant la vie du processus (128 comptes
+maximum), même après suppression des jetons, pour éviter un problème ABA.
+
+Le client `cost-monitor` demande `offline_access`, après consentement, et
+`selections:read`. Une session SSO en ligne et l’autorisation offline ont des
+cycles de vie distincts. Une déconnexion de la **SPA catalogue** n’annule pas
+l’offline token ; une révocation du consentement client dans Keycloak bloque
+les renouvellements suivants. Aucun jeton offline ne sert de credential direct
+à l’API. **Déconnecter le catalogue** dans Cost Monitor efface cette connexion
+mais conserve le login applicatif. **Se déconnecter de Cost Monitor** ferme la
+session navigateur et annule ses tentatives de connexion, mais conserve
+l’intégration du compte. Une suppression catalogue, elle, s’applique à toutes les
+sessions de ce compte. Aucune action locale ne
+prétend révoquer le consentement distant. La révocation catalogue rend cette
+intégration inutilisable mais ne déconnecte pas l’utilisateur de Cost Monitor.
+Le login utilise `prompt=login` (choix d’un autre compte via les formulaires
+natifs), tandis que la connexion catalogue utilise `prompt=consent` et peut
+réutiliser le SSO. Aucun backchannel logout applicatif n’est ajouté ici.
+
+Les capacités du cœur ne sont pas des rôles Keycloak : `access::Actor` est
+construit à la frontière depuis des claims signés, avec intersection des scopes,
+rôles et permissions maximales du client `azp`. `cost-monitor` est plafonné à
+`SelectionsRead`, `catalog-loader` à `CatalogSeed` et la SPA aux opérations
+interactives autorisées par le rôle. `cost-monitor-login` n’a aucune capacité API,
+même en cas de jeton mal configuré portant une audience ou des scopes excessifs.
+Les clients/scopes absents ou inconnus
+échouent en mode fermé. Le scope `offline_access` ne donne aucune capacité.
+
+Une nouvelle base de données, Keycloak Authorization Services, la collecte
+périodique, les alertes et l’historique restent hors périmètre. Les limites de
+sécurité locales et le scénario reproductible sont décrits dans
+[le guide Cost Monitor](cost-monitor.md).

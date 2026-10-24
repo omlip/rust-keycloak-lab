@@ -1,9 +1,8 @@
 use olaninc_api::{
-    app_with_catalog,
+    app,
     auth::{AuthConfig, Authenticator},
-    catalog::{catalog_service::CatalogService, in_memory_repository::InMemoryCatalogRepository},
 };
-use std::{env, error::Error, sync::Arc};
+use std::{env, error::Error};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -22,8 +21,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let address = env::var("BIND_ADDRESS").unwrap_or_else(|_| "127.0.0.1:3000".into());
     let listener = tokio::net::TcpListener::bind(&address).await?;
     tracing::info!(%address, "API prête");
-    let catalog = CatalogService::new(Arc::new(InMemoryCatalogRepository::default()));
-    axum::serve(listener, app_with_catalog(auth, catalog))
+    axum::serve(listener, app(auth))
         .with_graceful_shutdown(shutdown())
         .await?;
     Ok(())

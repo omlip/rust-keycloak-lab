@@ -18,6 +18,17 @@
   "ssoSessionMaxLifespan": 36000,
   "passwordPolicy": "length(12)",
   "defaultSignatureAlgorithm": "RS256",
+  "attributes": { "CreateDefaultClientScopes": "true" },
+  "clientScopes": [
+    { "name": "catalog:read", "protocol": "openid-connect", "attributes": { "include.in.token.scope": "true" } },
+    { "name": "catalog:write", "protocol": "openid-connect", "attributes": { "include.in.token.scope": "true" } },
+    { "name": "catalog:seed", "protocol": "openid-connect", "attributes": { "include.in.token.scope": "true" } },
+    { "name": "selections:read", "protocol": "openid-connect", "attributes": {
+      "include.in.token.scope": "true", "display.on.consent.screen": "true",
+      "consent.screen.text": "Consulter mes sélections de services et leurs coûts (lecture seule)"
+    } },
+    { "name": "selections:write", "protocol": "openid-connect", "attributes": { "include.in.token.scope": "true" } }
+  ],
   "roles": {
     "realm": [
       { "name": "users", "description": "Accès à l’espace utilisateur" },
@@ -45,7 +56,7 @@
         "pkce.code.challenge.method": "S256",
         "post.logout.redirect.uris": "${SPA_ORIGIN}/"
       },
-      "defaultClientScopes": ["basic", "web-origins", "profile", "email"],
+      "defaultClientScopes": ["basic", "web-origins", "profile", "email", "catalog:read", "catalog:write", "selections:read", "selections:write"],
       "optionalClientScopes": [],
       "protocolMappers": [
         {
@@ -96,7 +107,7 @@
         "oidc.ciba.grant.enabled": "false",
         "client_credentials.use_refresh_token": "false"
       },
-      "defaultClientScopes": ["basic"],
+      "defaultClientScopes": ["basic", "catalog:seed"],
       "optionalClientScopes": [],
       "protocolMappers": [
         {
@@ -128,6 +139,60 @@
       ]
     },
     {
+      "clientId": "cost-monitor-login",
+      "name": "Cost Monitor — connexion à l’application",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "consentRequired": false,
+      "fullScopeAllowed": false,
+      "redirectUris": ["http://localhost:8082/oidc/login/callback"],
+      "webOrigins": [],
+      "attributes": { "pkce.code.challenge.method": "S256" },
+      "defaultClientScopes": ["basic", "profile"],
+      "optionalClientScopes": [],
+      "protocolMappers": []
+    },
+    {
+      "clientId": "cost-monitor",
+      "name": "Catalogue — délégation à Cost Monitor",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "consentRequired": true,
+      "fullScopeAllowed": false,
+      "redirectUris": ["http://localhost:8082/oidc/catalog/callback"],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "access.token.lifespan": "60"
+      },
+      "defaultClientScopes": ["basic", "profile", "selections:read"],
+      "optionalClientScopes": ["offline_access"],
+      "protocolMappers": [
+        {
+          "name": "api-audience", "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper", "consentRequired": false,
+          "config": { "included.client.audience": "olaninc-api", "id.token.claim": "false", "access.token.claim": "true" }
+        },
+        {
+          "name": "application-realm-roles", "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper", "consentRequired": false,
+          "config": { "multivalued": "true", "claim.name": "realm_access.roles", "jsonType.label": "String", "id.token.claim": "false", "access.token.claim": "true" }
+        }
+      ]
+    },
+    {
       "clientId": "olaninc-api",
       "name": "API Rust — audience uniquement",
       "enabled": true,
@@ -142,7 +207,8 @@
   ],
   "scopeMappings": [
     { "client": "olaninc-spa", "roles": ["users", "admin"] },
-    { "client": "catalog-loader", "roles": ["catalog-seed"] }
+    { "client": "catalog-loader", "roles": ["catalog-seed"] },
+    { "client": "cost-monitor", "roles": ["users", "admin", "offline_access"] }
   ],
   "smtpServer": {
     "host": "mailpit",

@@ -1,5 +1,6 @@
 mod jwks;
 
+use crate::access::{Actor, Permission};
 use axum::{
     Json,
     extract::{Request, State},
@@ -36,6 +37,10 @@ pub struct Claims {
     pub typ: String,
     #[serde(default)]
     pub realm_access: RealmAccess,
+    #[serde(default)]
+    pub scope: String,
+    #[serde(default)]
+    pub azp: String,
 }
 
 #[derive(Clone, Default, Deserialize)]
@@ -45,6 +50,31 @@ pub struct RealmAccess {
 }
 
 impl Claims {
+    pub fn actor(&self) -> Actor {
+        use Permission::*;
+        // Intersect user roles, granted OAuth scopes and the registered client's
+        // maximum capabilities. Missing/unknown clients or scopes fail closed.
+        let allowed: &[Permission] = match self.azp.as_str() {
+            "olaninc-spa" => &[CatalogRead, CatalogWrite, SelectionsRead, SelectionsWrite],
+            "cost-monitor" => &[SelectionsRead],
+            "catalog-loader" => &[CatalogSeed],
+            _ => &[],
+        };
+        let has = |role| self.realm_access.roles.iter().any(|r| r == role);
+        let permissions: Vec<_> = allowed
+            .iter()
+            .copied()
+            .filter(|p| {
+                let role_allowed = match p {
+                    CatalogWrite => has("admin"),
+                    CatalogSeed => has("catalog-seed"),
+                    _ => has("users") || has("admin"),
+                };
+                role_allowed && self.scope.split_whitespace().any(|s| s == p.scope())
+            })
+            .collect();
+        Actor::new(self.sub.clone(), &permissions)
+    }
     pub fn require_any_role(&self, allowed: &[&str]) -> Result<(), ApiError> {
         if allowed
             .iter()

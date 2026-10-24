@@ -25,6 +25,12 @@ docker compose up --build -d --wait
 docker compose ps
 ```
 
+**Mise à niveau d’un realm existant :** les permissions de l’API utilisent
+désormais des scopes métier. Après le démarrage de Keycloak, exécuter
+`python3 scripts/configure-cost-monitor.py`, même si le service Cost Monitor
+n’est pas lancé, puis se reconnecter à la SPA. Un import JSON ne met pas à jour
+un realm déjà présent ; aucun effacement de volume n’est nécessaire.
+
 | Service | URL navigateur |
 | --- | --- |
 | Application | http://localhost:8080 |
@@ -218,6 +224,90 @@ Pour créer ou modifier, envoyer `Content-Type: application/json` avec les quatr
 
 Codes de catégories : `compute`, `storage`, `backup`, `hosting`, `network`. Un service inexistant renvoie `404`, un corps incompatible ou une catégorie inconnue `400`. Les protections `401`/`403` restent identiques aux endpoints de démonstration.
 
+### Sélections personnelles de services
+
+Le lien **Mes sélections** donne accès à un espace privé pour les comptes `users`
+et `admin`, locaux ou AD. Chaque utilisateur peut créer plusieurs sélections
+nommées, les renommer/supprimer et ajouter/retirer des services, sans quantité ni
+doublon. Le total mensuel est calculé par Rust en centimes à partir des prix
+actuels. Les données sont relues à l’ouverture des pages et après modification,
+sans actualisation temps réel entre les sessions.
+
+Une sélection n’est accessible qu’à son propriétaire : **un administrateur ne
+peut pas lire ou modifier celle d’une autre personne**. Le propriétaire vient
+du `sub` du JWT validé, jamais d’un champ JSON. La règle appartient au domaine et
+est appliquée par le service applicatif, indépendamment de HTTP ou du stockage.
+Keycloak Authorization Services n’est pas utilisé.
+
+| Endpoint | Action | Succès |
+| --- | --- | --- |
+| `GET /api/selections` | Lister mes sélections avec leurs services et totaux | `200` |
+| `POST /api/selections` | Créer avec `{"name":"Infrastructure Montréal"}` | `201` |
+| `GET /api/selections/{id}` | Consulter ma sélection | `200` |
+| `PATCH /api/selections/{id}` | Renommer avec `{"name":"Production"}` | `200` |
+| `DELETE /api/selections/{id}` | Supprimer ma sélection, pas les services | `204` |
+| `PUT /api/selections/{id}/services/{serviceId}` | Ajouter sans doublon, corps vide | `200` |
+| `DELETE /api/selections/{id}/services/{serviceId}` | Retirer, corps vide | `200` |
+
+Toutes ces routes exigent `users` ou `admin`. Le compte `catalog-loader` reste
+refusé (`403`). Une sélection étrangère et une sélection absente produisent le
+même `404` JSON. Les champs propriétaires fournis par le client sont refusés.
+Un nom vide donne `400`, une contention persistante `409`, et un dépassement du
+total représentable `422`, jamais un total silencieusement erroné.
+
+Supprimer un service du catalogue retire automatiquement ses références de
+toutes les sélections. Le seed remplaçant tous les identifiants, il **vide le
+contenu des sélections mais conserve leurs noms et propriétaires**. Un
+redémarrage de Rust efface le catalogue **et les sélections**, contrairement aux
+comptes Keycloak/AD persistés. Aucun partage ou accès administrateur dérogatoire.
+
+Scénario pédagogique :
+
+1. Avec `user1`, créer « Infrastructure Montréal », ajouter deux services et
+   vérifier le total ; un second ajout du même service ne crée aucun doublon.
+2. Dans une autre session privée, `user2` crée sa propre sélection. Il ne voit
+   pas celle de `user1`. Copier son URL `/selections/{id}` donne « Sélection
+   introuvable ». Avec son JWT, l’API répond également `404` sur toutes les
+   opérations de cette sélection.
+3. Faire le même essai avec `admin1` : le rôle `admin` ne contourne pas la
+   propriété. Il peut gérer uniquement ses propres sélections.
+4. Depuis le catalogue avec `admin1`, changer un tarif ; rouvrir la sélection de
+   `user1` pour voir le nouveau total. Supprimer un service le retire de la
+   sélection. Tester ensuite renommage et suppression d’une sélection.
+5. Le même fonctionnement s’applique aux comptes locaux `demo-user` et
+   `demo-admin`, avec leurs mots de passe actuels.
+
+## Application tierce Cost Monitor et délégation offline
+
+**Cost Monitor**, sur <http://localhost:8082>, possède une connexion applicative
+Keycloak distincte, sans accès API. Une fois connecté, **Connecter mon catalogue**
+demande séparément le consentement de lecture des sélections et l’accès offline.
+Les deux identités doivent correspondre (issuer + `sub`). L’offline token reste
+côté serveur. Aucun traitement périodique à cette étape.
+
+```sh
+python3 scripts/configure-cost-monitor.py
+docker compose --profile cost-monitor up --build -d --wait
+```
+
+Keycloak doit déjà être démarré pour le helper. Ajouter `--profile ad` au
+démarrage si l’annuaire configuré est utilisé. **Reconnecter la SPA** après la
+mise à niveau pour obtenir ses nouveaux scopes métier ; les anciens jetons sans
+scopes sont refusés. Les secrets techniques sont ignorés dans
+`.secrets/cost-monitor-login.secret` et `.secrets/cost-monitor.secret`.
+Les deux clients n’ont ni password grant ni compte de service.
+
+Voir [le guide Cost Monitor](docs/cost-monitor.md) pour le scénario de
+renouvellement après déconnexion, la révocation, les permissions, les cookies et
+les limites du stockage mémoire. **Déconnecter le catalogue** conserve le login
+Cost Monitor ; **Se déconnecter de Cost Monitor** ferme toute la session locale.
+L’intégration catalogue est conservée séparément par compte (`issuer` + `sub`) :
+elle est retrouvée à la reconnexion du même utilisateur, pas par un autre compte.
+Seul **Déconnecter le catalogue** en supprime explicitement les jetons locaux,
+pour toutes les sessions du compte. Le redémarrage du serveur perd les deux
+stockages, volontairement en mémoire.
+Ces actions ne révoquent pas à elles seules le consentement distant Keycloak.
+
 ## Tests et vérifications
 
 Sur la machine, avec Rust récent et Node ≥ 20.19 :
@@ -225,6 +315,8 @@ Sur la machine, avec Rust récent et Node ≥ 20.19 :
 ```sh
 cargo test --locked --manifest-path backend/Cargo.toml
 cargo clippy --locked --manifest-path backend/Cargo.toml --all-targets -- -D warnings
+cargo test --locked --manifest-path cost-monitor/Cargo.toml
+cargo clippy --locked --manifest-path cost-monitor/Cargo.toml --all-targets -- -D warnings
 ```
 
 Dans `frontend/` :
@@ -240,6 +332,12 @@ Les tests Rust lancent un serveur JWKS local avec une clé RSA de test et exerce
 Les tests du catalogue couvrent également le CRUD, les identifiants concurrents, le stockage partagé, le démarrage vide, le remplacement par le JSON prédéfini et les permissions de tous les nouveaux endpoints.
 
 Ils vérifient que le seed refuse `admin` seul (`403`), accepte `catalog-seed`, et que ce rôle technique ne permet ni lecture ni CRUD, ni accès à `/api/user` ou `/api/admin`. Une clé brute passée dans `X-API-Key` sans JWT reste refusée (`401`).
+
+Les tests des sélections utilisent plusieurs identités JWT distinctes. Ils
+couvrent la propriété dans le domaine et le service (y compris avec un adapter
+qui ne filtre rien), le refus des accès croisés et des contournements admin,
+le CRUD, les prix actuels, les doublons, les suppressions/seed, les débordements
+et les écritures concurrentes ou périmées.
 
 Les parcours navigateur sont vérifiés à l’aide des scénarios ci-dessus ; aucune suite E2E permanente n’est ajoutée en V1.
 
@@ -264,7 +362,9 @@ Dans `frontend/`, lancer `npm ci`, puis `npm run dev`. Vite écoute sur `http://
 
 ## Arrêter et remettre à zéro
 
-Le catalogue n’a pas de volume : **tout arrêt/redémarrage du processus Rust le remet à vide**, même si les données IAM sont conservées.
+Le catalogue et les sélections n’ont pas de volume : **tout arrêt/redémarrage du
+backend les remet à vide**, même si les données IAM sont conservées. Cost Monitor
+perd également ses sessions et jetons locaux à son propre redémarrage.
 
 ```sh
 # Arrêter en conservant comptes, mots de passe, OTP et e-mails
@@ -273,6 +373,9 @@ docker compose down
 # Redémarrer sans reconstruire
 docker compose up -d --wait
 ```
+
+Si les options sont utilisées, ajouter `--profile ad --profile cost-monitor`
+aux commandes d’arrêt et de démarrage pour inclure aussi ces services.
 
 **Attention : les commandes suivantes suppriment les données Keycloak et Mailpit de ce projet.** Les mots de passe initiaux temporaires seront rétablis au prochain import.
 
@@ -285,18 +388,25 @@ L’import de `keycloak/olaninc-realm.json` s’exécute **uniquement si le real
 
 Après une remise à zéro des volumes, Keycloak génère un nouveau secret pour `catalog-loader` : rejouer `python3 scripts/configure-catalog-loader.py` avant les appels de chargement pour synchroniser le fichier local. Pour ajouter seulement ce client à une installation existante, ce script suffit : aucune remise à zéro n’est nécessaire.
 
+Pour Cost Monitor, rejouer également `python3 scripts/configure-cost-monitor.py`
+puis recréer son conteneur afin qu’il charge le nouveau secret. Ne jamais
+réinitialiser les volumes pour une simple mise à jour des scopes ou du thème.
+
 ## Ports déjà occupés
 
 Sans arrêter un autre projet, choisir des ports libres **avant le premier import** :
 
 ```sh
-FRONTEND_HTTP_PORT=8082 MAILPIT_HTTP_PORT=8026 docker compose up --build -d --wait
+FRONTEND_HTTP_PORT=8083 MAILPIT_HTTP_PORT=8026 docker compose up --build -d --wait
 ```
 
-La SPA est alors sur http://localhost:8082 et Mailpit sur http://localhost:8026. Keycloak reste sur `8081`. Réutiliser les mêmes variables pour les prochains démarrages, ou les conserver dans un fichier `.env` local ignoré :
+La SPA est alors sur http://localhost:8083 et Mailpit sur http://localhost:8026.
+Keycloak reste sur `8081` et `8082` est réservé à Cost Monitor. Réutiliser les
+mêmes variables pour les prochains démarrages, ou les conserver dans un fichier
+`.env` local ignoré :
 
 ```dotenv
-FRONTEND_HTTP_PORT=8082
+FRONTEND_HTTP_PORT=8083
 MAILPIT_HTTP_PORT=8026
 ```
 
@@ -323,7 +433,9 @@ frontend/                     Vue, keycloak-js, proxy Nginx
 backend/src/auth/mod.rs       Validation JWT, middleware et erreurs de sécurité
 backend/src/auth/jwks.rs      Récupération et cache des clés publiques
 backend/src/lib.rs            Routes et politiques de rôles
-backend/src/catalog/          Cœur catalogue, port et adaptateurs REST/mémoire
+backend/src/catalog/          Cœur catalogue, port et adaptateur REST
+backend/src/selections/       Domaine, règle de propriété, cas d’usage et REST
+backend/src/storage/          Adaptateur mémoire partagé catalogue/sélections
 backend/data/demo_catalog.json Catalogue fictif chargé uniquement par POST /seed
 scripts/configure-catalog-loader.py Configuration native du client technique et récupération locale du secret
 backend/tests/security.rs     Tests de sécurité sans IAM externe

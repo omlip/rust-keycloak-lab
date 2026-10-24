@@ -16,6 +16,7 @@ nav a { color: var(--muted); text-decoration: none; }
 nav a.router-link-active { color: var(--accent); font-weight: 700; }
 .secure-navigation { width: 100%; justify-content: space-between; flex-wrap: nowrap; }
 .secure-navigation > a { font-weight: 700; }
+.primary-links { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem 1.25rem; min-width: 0; font-weight: 700; }
 .catalog-link { display: inline-flex; align-items: center; gap: .65rem; }
 .catalog-link img { flex-shrink: 0; }
 .account-menu { position: relative; flex-shrink: 0; margin-left: auto; }
@@ -68,4 +69,7 @@ footer { border-top: 1px solid var(--border); color: var(--muted); font-size: .7
 .service-card .service-price { color: var(--accent); font-size: 1.5rem; font-weight: 750; margin-bottom: 0; }
 .service-price span { font-size: .85rem; font-weight: 400; }
 .danger { color: #a82235; }
+.selection-summary { margin-bottom: 1.5rem; }
+.selection-summary h2, .service-card h3 { overflow-wrap: anywhere; }
+.selection-summary .selection-total { color: var(--accent); font-size: 1.25rem; }
 @media (max-width: 760px) { .shell { padding: 0 1rem; } .space-heading { padding: 1.4rem; } .space-content { padding: .8rem; } main { padding: 1.5rem 0; } nav { gap: .9rem; } }
