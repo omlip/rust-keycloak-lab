@@ -3,7 +3,7 @@
 .idea/
 **/target/
 **/node_modules/
-frontend/dist/
-keycloak/truststores/*.crt
+catalog-services/frontend/dist/
+infrastructure/keycloak/truststores/*.crt
 **/__pycache__/
 *.log

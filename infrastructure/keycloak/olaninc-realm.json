@@ -1,0 +1,257 @@
+{
+  "realm": "olaninc",
+  "loginTheme": "ni2",
+  "displayName": "Olaninc",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "rememberMe": false,
+  "verifyEmail": false,
+  "internationalizationEnabled": true,
+  "supportedLocales": ["fr", "en"],
+  "defaultLocale": "fr",
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "passwordPolicy": "length(12)",
+  "defaultSignatureAlgorithm": "RS256",
+  "attributes": { "CreateDefaultClientScopes": "true" },
+  "clientScopes": [
+    { "name": "catalog:read", "protocol": "openid-connect", "attributes": { "include.in.token.scope": "true" } },
+    { "name": "catalog:write", "protocol": "openid-connect", "attributes": { "include.in.token.scope": "true" } },
+    { "name": "catalog:seed", "protocol": "openid-connect", "attributes": { "include.in.token.scope": "true" } },
+    { "name": "selections:read", "protocol": "openid-connect", "attributes": {
+      "include.in.token.scope": "true", "display.on.consent.screen": "true",
+      "consent.screen.text": "Consulter mes sélections de services et leurs coûts (lecture seule)"
+    } },
+    { "name": "selections:write", "protocol": "openid-connect", "attributes": { "include.in.token.scope": "true" } }
+  ],
+  "roles": {
+    "realm": [
+      { "name": "users", "description": "Accès à l’espace utilisateur" },
+      { "name": "admin", "description": "Accès aux deux espaces applicatifs" },
+      { "name": "catalog-seed", "description": "Chargement technique du catalogue uniquement" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "olaninc-spa",
+      "name": "Démonstration Olaninc — Vue",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "rootUrl": "${SPA_ORIGIN}",
+      "baseUrl": "${SPA_ORIGIN}/",
+      "redirectUris": ["${SPA_ORIGIN}/", "${SPA_ORIGIN}/silent-check-sso.html"],
+      "webOrigins": ["${SPA_ORIGIN}"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${SPA_ORIGIN}/"
+      },
+      "defaultClientScopes": ["basic", "web-origins", "profile", "email", "catalog:read", "catalog:write", "selections:read", "selections:write"],
+      "optionalClientScopes": [],
+      "protocolMappers": [
+        {
+          "name": "api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "olaninc-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "application-realm-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "catalog-loader",
+      "name": "Chargement technique du catalogue",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "clientAuthenticatorType": "client-secret",
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "authorizationServicesEnabled": false,
+      "fullScopeAllowed": false,
+      "redirectUris": [],
+      "webOrigins": [],
+      "attributes": {
+        "oauth2.device.authorization.grant.enabled": "false",
+        "oidc.ciba.grant.enabled": "false",
+        "client_credentials.use_refresh_token": "false"
+      },
+      "defaultClientScopes": ["basic", "catalog:seed"],
+      "optionalClientScopes": [],
+      "protocolMappers": [
+        {
+          "name": "api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "olaninc-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "application-realm-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "cost-monitor-login",
+      "name": "Cost Monitor — connexion à l’application",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "consentRequired": false,
+      "fullScopeAllowed": false,
+      "redirectUris": ["http://localhost:8082/oidc/login/callback"],
+      "webOrigins": [],
+      "attributes": { "pkce.code.challenge.method": "S256" },
+      "defaultClientScopes": ["basic", "profile"],
+      "optionalClientScopes": [],
+      "protocolMappers": []
+    },
+    {
+      "clientId": "cost-monitor",
+      "name": "Catalogue — délégation à Cost Monitor",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "consentRequired": true,
+      "fullScopeAllowed": false,
+      "redirectUris": ["http://localhost:8082/oidc/catalog/callback"],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "access.token.lifespan": "60"
+      },
+      "defaultClientScopes": ["basic", "profile", "email", "selections:read"],
+      "optionalClientScopes": ["offline_access"],
+      "protocolMappers": [
+        {
+          "name": "api-audience", "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper", "consentRequired": false,
+          "config": { "included.client.audience": "olaninc-api", "id.token.claim": "false", "access.token.claim": "true" }
+        },
+        {
+          "name": "application-realm-roles", "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper", "consentRequired": false,
+          "config": { "multivalued": "true", "claim.name": "realm_access.roles", "jsonType.label": "String", "id.token.claim": "false", "access.token.claim": "true" }
+        }
+      ]
+    },
+    {
+      "clientId": "olaninc-api",
+      "name": "API Rust — audience uniquement",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "bearerOnly": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false
+    }
+  ],
+  "scopeMappings": [
+    { "client": "olaninc-spa", "roles": ["users", "admin"] },
+    { "client": "catalog-loader", "roles": ["catalog-seed"] },
+    { "client": "cost-monitor", "roles": ["users", "admin", "offline_access"] }
+  ],
+  "smtpServer": {
+    "host": "mailpit",
+    "port": "1025",
+    "from": "no-reply@olaninc.test",
+    "fromDisplayName": "Olaninc — démonstration locale",
+    "auth": "false",
+    "ssl": "false",
+    "starttls": "false"
+  },
+  "users": [
+    {
+      "username": "service-account-catalog-loader",
+      "enabled": true,
+      "serviceAccountClientId": "catalog-loader",
+      "realmRoles": ["catalog-seed"]
+    },
+    {
+      "username": "demo-user",
+      "enabled": true,
+      "email": "user@olaninc.test",
+      "emailVerified": true,
+      "firstName": "Camille",
+      "lastName": "Utilisateur",
+      "realmRoles": ["default-roles-olaninc", "users"],
+      "requiredActions": ["UPDATE_PASSWORD"],
+      "credentials": [
+        { "type": "password", "value": "User-local-only-2026!", "temporary": true }
+      ]
+    },
+    {
+      "username": "demo-admin",
+      "enabled": true,
+      "email": "admin@olaninc.test",
+      "emailVerified": true,
+      "firstName": "Alex",
+      "lastName": "Administrateur",
+      "realmRoles": ["default-roles-olaninc", "admin"],
+      "clientRoles": { "realm-management": ["realm-admin"] },
+      "requiredActions": ["UPDATE_PASSWORD"],
+      "credentials": [
+        { "type": "password", "value": "Admin-local-only-2026!", "temporary": true }
+      ]
+    }
+  ]
+}

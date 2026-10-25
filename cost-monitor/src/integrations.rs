@@ -67,6 +67,7 @@ pub struct Integration {
     owner: AccountId,
     epoch: u64,
     pub catalog: Option<CatalogConnection>,
+    pub budgets: crate::alerts::BudgetRules,
 }
 
 impl Integration {
@@ -78,6 +79,7 @@ impl Integration {
             owner,
             epoch: 0,
             catalog: None,
+            budgets: crate::alerts::BudgetRules::default(),
         }
     }
     pub fn begin_catalog(&mut self) -> u64 {
@@ -117,6 +119,9 @@ pub struct Integrations {
 }
 
 impl Integrations {
+    pub async fn entries(&self) -> Vec<Arc<Mutex<Integration>>> {
+        self.accounts.read().await.values().cloned().collect()
+    }
     pub async fn get(&self, identity: &Identity) -> Option<Arc<Mutex<Integration>>> {
         self.accounts
             .read()
@@ -158,6 +163,7 @@ mod tests {
     }
     fn tokens() -> Tokens {
         Tokens {
+            recipient: None,
             access: AccessToken::new("access".into()),
             offline: RefreshToken::new("offline".into()),
             lifetime: Duration::from_secs(60),

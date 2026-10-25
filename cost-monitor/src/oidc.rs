@@ -86,6 +86,7 @@ pub struct Tokens {
     pub access: AccessToken,
     pub offline: RefreshToken,
     pub lifetime: Duration,
+    pub recipient: Option<crate::alerts::Recipient>,
 }
 #[derive(Clone)]
 pub struct Identity {
@@ -166,6 +167,7 @@ impl Oidc {
             Purpose::Catalog => request
                 .add_scope(Scope::new("selections:read".into()))
                 .add_scope(Scope::new("offline_access".into()))
+                .add_scope(Scope::new("email".into()))
                 .add_extra_param("prompt", "consent"),
         };
         let (url, state, nonce) = request.url();
@@ -182,7 +184,7 @@ impl Oidc {
         response: &CoreTokenResponse,
         nonce: &Nonce,
         refreshing: bool,
-    ) -> Result<Identity, OidcError> {
+    ) -> Result<(Identity, Option<crate::alerts::Recipient>), OidcError> {
         let token = response
             .extra_fields()
             .id_token()
@@ -222,11 +224,18 @@ impl Oidc {
             .or_else(|| claims.name().and_then(|n| n.get(None)).map(|n| n.as_str()))
             .unwrap_or("Utilisateur")
             .to_owned();
-        Ok(Identity {
-            issuer: self.issuer.clone(),
-            subject,
-            name,
-        })
+        let recipient = claims.email().map(|address| crate::alerts::Recipient {
+            address: address.as_str().to_owned(),
+            verified: claims.email_verified().unwrap_or(false),
+        });
+        Ok((
+            Identity {
+                issuer: self.issuer.clone(),
+                subject,
+                name,
+            },
+            recipient,
+        ))
     }
 
     fn tokens(
@@ -248,6 +257,7 @@ impl Oidc {
             .cloned()
             .ok_or(OidcError::InvalidAuthorization)?;
         Ok(Tokens {
+            recipient: None,
             access: response.access_token().clone(),
             offline,
             lifetime: response
@@ -272,10 +282,10 @@ impl Oidc {
             .request_async(&self.http)
             .await
             .map_err(|_| OidcError::InvalidAuthorization)?;
-        Ok((
-            self.verify_identity(&response, nonce, false)?,
-            Self::tokens(&response, None)?,
-        ))
+        let (identity, recipient) = self.verify_identity(&response, nonce, false)?;
+        let mut tokens = Self::tokens(&response, None)?;
+        tokens.recipient = recipient;
+        Ok((identity, tokens))
     }
 
     // Login tokens are validated then dropped. They never become catalogue
@@ -311,7 +321,7 @@ impl Oidc {
         }) {
             return Err(OidcError::InvalidAuthorization);
         }
-        self.verify_identity(&response, nonce, false)
+        Ok(self.verify_identity(&response, nonce, false)?.0)
     }
 
     pub async fn refresh(
@@ -336,12 +346,15 @@ impl Oidc {
                 }
                 _ => OidcError::Unavailable,
             })?;
-        if response.extra_fields().id_token().is_some()
-            && self.verify_identity(&response, nonce, true)?.subject != subject
-        {
-            return Err(OidcError::InvalidAuthorization);
+        let mut tokens = Self::tokens(&response, Some(previous))?;
+        if response.extra_fields().id_token().is_some() {
+            let (identity, recipient) = self.verify_identity(&response, nonce, true)?;
+            if identity.subject != subject {
+                return Err(OidcError::InvalidAuthorization);
+            }
+            tokens.recipient = recipient;
         }
-        Self::tokens(&response, Some(previous))
+        Ok(tokens)
     }
 }
 

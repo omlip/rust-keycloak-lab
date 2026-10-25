@@ -11,7 +11,7 @@ Démarrer d’abord l’application normalement, puis exécuter depuis la racine
 
 ```sh
 docker compose up --build -d --wait
-python3 scripts/configure-ad.py
+python3 infrastructure/active-directory/scripts/configure-ad.py
 docker compose --profile ad ps
 ```
 
@@ -77,7 +77,7 @@ mots de passe et OTP actuels.
 
 La clé privée de l’autorité locale et le certificat serveur restent dans le
 volume Samba. Seule l’autorité publique est copiée vers
-`keycloak/truststores/ad-ca.crt` (ignorée par Git), montée en lecture seule et
+`infrastructure/keycloak/truststores/ad-ca.crt` (ignorée par Git), montée en lecture seule et
 chargée par le truststore système Keycloak. Le nom DNS est vérifié et aucun
 mode TLS permissif n’est activé. Le certificat serveur expire après 825 jours :
 son renouvellement est une opération de maintenance, non automatisée ici.
@@ -127,8 +127,8 @@ périodique n’est activée pour cette petite démo.
 ## Vérification automatisée
 
 ```sh
-python3 scripts/verify-ad.py
-python3 -m unittest discover -s scripts/tests -v
+python3 infrastructure/active-directory/scripts/verify-ad.py
+python3 -m unittest discover -s infrastructure/active-directory/scripts/tests -v
 ```
 
 Le script réalise les cinq connexions via **Authorization Code + PKCE** (aucun

@@ -1,11 +1,41 @@
-backend/target/
-cost-monitor/target/
-frontend/node_modules/
-frontend/dist/
+# Rust: binaries, compiled dependencies and build caches
+**/target/
+
+# Frontend dependencies and generated builds
+**/node_modules/
+**/dist/
+**/coverage/
+*.tsbuildinfo
+
+# Runtime logs
 *.log
+
+# Local configuration and secrets (keep shareable examples)
 .env
+.env.*
+!.env.example
+!.env.*.example
 .secrets/
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+# IDE and editor files
 .idea/
+*.swp
+*.swo
+*~
+*.bak
+*.orig
+
+# Python caches
 __pycache__/
 *.py[cod]
+
+# macOS metadata
 .DS_Store
+._*
+
+# Cargo.lock and package-lock.json intentionally remain versioned.

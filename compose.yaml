@@ -15,9 +15,9 @@ services:
       - "127.0.0.1:8081:8080"
     volumes:
       - keycloak-data:/opt/keycloak/data
-      - ./keycloak/olaninc-realm.json:/opt/keycloak/data/import/olaninc-realm.json:ro
-      - ./keycloak/themes/ni2:/opt/keycloak/themes/ni2:ro
-      - ./keycloak/truststores:/opt/keycloak/conf/truststores:ro
+      - ./infrastructure/keycloak/olaninc-realm.json:/opt/keycloak/data/import/olaninc-realm.json:ro
+      - ./infrastructure/keycloak/themes/ni2:/opt/keycloak/themes/ni2:ro
+      - ./infrastructure/keycloak/truststores:/opt/keycloak/conf/truststores:ro
     depends_on:
       mailpit:
         condition: service_healthy
@@ -31,7 +31,7 @@ services:
       start_period: 40s
 
   backend:
-    build: ./backend
+    build: ./catalog-services/backend
     environment:
       BIND_ADDRESS: 0.0.0.0:3000
       OIDC_ISSUER: http://localhost:8081/realms/olaninc
@@ -48,7 +48,7 @@ services:
       retries: 5
 
   frontend:
-    build: ./frontend
+    build: ./catalog-services/frontend
     ports:
       - "127.0.0.1:${FRONTEND_HTTP_PORT:-8080}:8080"
     depends_on:
@@ -88,6 +88,11 @@ services:
       API_BASE: http://backend:3000
       LOGIN_CLIENT_SECRET_FILE: /run/secrets/cost-monitor-login.secret
       CATALOG_CLIENT_SECRET_FILE: /run/secrets/cost-monitor.secret
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_FROM: "Cost Monitor <cost-monitor@olaninc.test>"
+      # Explicit local-only exception: dummy AD emails are captured by Mailpit.
+      ALLOW_UNVERIFIED_ALERT_EMAIL: "true"
     volumes:
       - ./.secrets/cost-monitor.secret:/run/secrets/cost-monitor.secret:ro
       - ./.secrets/cost-monitor-login.secret:/run/secrets/cost-monitor-login.secret:ro
@@ -108,7 +113,7 @@ services:
 
   ad:
     profiles: ["ad"]
-    build: ./ad
+    build: ./infrastructure/active-directory
     hostname: dc
     domainname: ad.olaninc.test
     volumes:

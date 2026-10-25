@@ -2,11 +2,34 @@
 
 Une SPA **Vue / TypeScript**, une API **Rust / Axum** et **Keycloak** pour démontrer l’authentification OIDC, les rôles et les opérations IAM natives. **Mailpit** capture tous les e-mails. Le thème Login Keycloak reprend la palette Ni² par CSS, sans remplacement des formulaires natifs. Aucune base applicative et aucun endpoint d’administration IAM dans Rust.
 
-### Thème Login Ni²
+## Organisation du dépôt
 
-`keycloak/themes/ni2/login` hérite de `keycloak.v2` (Keycloak 26.8 / PatternFly 5). Il conserve les templates, scripts, erreurs et parcours natifs ; seuls les styles changent : bleu nuit, boutons bleus, fond gris clair et accent orange. Le nom du realm reste inchangé. Aucun thème Account, Administration ou e-mail n’est modifié.
+```text
+catalog-services/
+  backend/          API Rust, catalogue et sélections personnelles
+  frontend/         Application Vue
+cost-monitor/       Application Rust de suivi des coûts
+infrastructure/
+  keycloak/         Realm, thème Login, certificats publics et scripts Keycloak
+    scripts/        Configuration des clients et utilitaire Admin CLI
+  active-directory/ Image et initialisation Samba Active Directory
+    scripts/        Configuration de la fédération, vérification et tests
+docs/               Architecture et guides pédagogiques
+compose.yaml        Assemblage commun des applications et de l’infrastructure
+```
 
-Le symbole de démonstration représente deux baies de serveurs bleu nuit avec des accents orange ; ce n’est pas le logo officiel Ni². Le même SVG est utilisé comme logo et favicon dans Vue et le thème Login. Les fichiers `frontend/public/logo.svg` et `keycloak/themes/ni2/login/resources/img/logo.svg` doivent rester identiques. Le logo est décoratif à côté des titres/libellés existants, sans ajouter de texte redondant aux lecteurs d’écran.
+Les noms des services Docker et des volumes restent inchangés. Les secrets
+locaux restent dans `.secrets/` à la racine, hors du code et ignorés par Git.
+Mailpit reste défini dans Compose : il n’a pas de fichiers propres à regrouper.
+Sauf indication contraire, les commandes ci-dessous s’exécutent à la racine du
+dépôt. Depuis `catalog-services/backend/`, le secret du loader se lit avec le
+chemin `../../.secrets/catalog-loader.secret` (et non plus `../.secrets/`).
+
+## Thème Login Ni²
+
+`infrastructure/keycloak/themes/ni2/login` hérite de `keycloak.v2` (Keycloak 26.8 / PatternFly 5). Il conserve les templates, scripts, erreurs et parcours natifs ; seuls les styles changent : bleu nuit, boutons bleus, fond gris clair et accent orange. Le nom du realm reste inchangé. Aucun thème Account, Administration ou e-mail n’est modifié.
+
+Le symbole de démonstration représente deux baies de serveurs bleu nuit avec des accents orange ; ce n’est pas le logo officiel Ni². Le même SVG est utilisé comme logo et favicon dans Vue et le thème Login. Les fichiers `catalog-services/frontend/public/logo.svg` et `infrastructure/keycloak/themes/ni2/login/resources/img/logo.svg` doivent rester identiques. Le logo est décoratif à côté des titres/libellés existants, sans ajouter de texte redondant aux lecteurs d’écran.
 
 Le dossier est monté en lecture seule dans `/opt/keycloak/themes/ni2`. Les caches de thèmes sont désactivés dans cette configuration locale pour faciliter les ajustements CSS ; ce réglage n’est pas destiné à la production. Le thème couvre la connexion, les mots de passe oubliés/réinitialisés ou imposés, ainsi que la saisie/configuration OTP des parcours Login. Les écrans propres à la console Account restent natifs.
 
@@ -27,7 +50,7 @@ docker compose ps
 
 **Mise à niveau d’un realm existant :** les permissions de l’API utilisent
 désormais des scopes métier. Après le démarrage de Keycloak, exécuter
-`python3 scripts/configure-cost-monitor.py`, même si le service Cost Monitor
+`python3 infrastructure/keycloak/scripts/configure-cost-monitor.py`, même si le service Cost Monitor
 n’est pas lancé, puis se reconnecter à la SPA. Un import JSON ne met pas à jour
 un realm déjà présent ; aucun effacement de volume n’est nécessaire.
 
@@ -56,7 +79,7 @@ Le compte technique initial est distinct : `bootstrap-admin` / `Bootstrap-local-
 
 Une démonstration **compatible Active Directory** est disponible avec Samba AD DC
 dans Docker (profil `ad`, sans ports publiés ni conteneur privilégié). Après le
-démarrage normal, exécuter `python3 scripts/configure-ad.py` : le script crée
+démarrage normal, exécuter `python3 infrastructure/active-directory/scripts/configure-ad.py` : le script crée
 `user1` à `user4` avec le rôle `users` et `admin1` avec le rôle applicatif `admin`,
 via des groupes AD et une fédération LDAPS en lecture seule. Les comptes locaux
 restent conservés. Les mots de passe générés sont dans
@@ -65,7 +88,7 @@ d’administration Keycloak ou du domaine AD.
 
 Voir [le guide Active Directory](docs/active-directory.md) pour le scénario,
 les limites de la lecture seule, les redémarrages avec `--profile ad`, la
-persistance et les vérifications `python3 scripts/verify-ad.py`.
+persistance et les vérifications `python3 infrastructure/active-directory/scripts/verify-ad.py`.
 
 ## Scénarios de démonstration
 
@@ -73,7 +96,7 @@ persistance et les vérifications `python3 scripts/verify-ad.py`.
 
 1. Ouvrir l’application et cliquer sur **Se connecter**.
 2. Se connecter avec `demo-user`, puis changer le mot de passe initial si demandé.
-3. La connexion depuis l’accueil mène directement au **Catalogue de services**. Le lien du catalogue est à gauche ; le bouton ☰ à droite ouvre **Paramètres** et **Déconnexion**. Ouvrir **Paramètres** et vérifier la page bleue, le badge `USER`, le nom Camille Utilisateur et les actions de sécurité du compte. Aucun lien vers la console d’administration n’est affiché pour ce compte.
+3. La connexion depuis l’accueil mène directement au **Catalogue de services**. L’en-tête reprend celui de Cost Monitor : logo et nom de l’application à gauche, ligne orange et burger ☰ à droite. Ce menu contient **Catalogue de services**, **Mes sélections**, **Paramètres** et **Déconnexion**. Ouvrir **Paramètres** et vérifier le fond bleu pâle, le titre/badge `USER` bleus, le nom Camille Utilisateur et les actions de sécurité du compte. Aucun lien vers la console d’administration n’est affiché pour ce compte. Le header reste neutre ; le bandeau métier ne répète plus de bordure supérieure épaisse.
 4. Saisir `http://localhost:8080/admin` : **Accès refusé**. Le compte reste connecté.
 5. Ouvrir le menu ☰ puis cliquer sur **Déconnexion** : retour à l’accueil public et fin de la session SSO courante.
 
@@ -91,13 +114,13 @@ Le menu est identique sur ordinateur et mobile ; il se ferme après sélection, 
 Sans jeton :
 
 ```sh
-curl -i http://localhost:8080/api/user
-curl -i http://localhost:8080/api/admin
+curl -i http://localhost:8080/api/catalog/services
+curl -i http://localhost:8080/api/selections
 ```
 
 Les deux réponses sont `401`, en JSON, avec `WWW-Authenticate: Bearer`, sans redirection HTML.
 
-Les endpoints `/api/user` et `/api/admin` restent disponibles pour les exercices, mais ne sont plus appelés ni affichés dans l’interface. Avec `demo-user` connecté, ouvrir les outils de développement du navigateur → **Réseau**, puis accéder au catalogue et sélectionner `/api/catalog/services`. Le menu **Copier en tant que cURL** fournit une commande avec le jeton d’accès courant : remplacer le chemin par `/api/user` donne `200`, et par `/api/admin` donne `403`. Avec `demo-admin`, les deux donnent `200`.
+Avec `demo-user` connecté, ouvrir les outils de développement du navigateur → **Réseau**, puis accéder au catalogue et sélectionner `/api/catalog/services`. Le menu **Copier en tant que cURL** fournit une commande avec le jeton d’accès courant : la lecture donne `200`. Une création (`POST` sur cette même route, avec le corps JSON documenté plus bas) donne `403` pour `demo-user`, mais `201` pour `demo-admin`. Supprimer ensuite le service de test depuis le catalogue administrateur.
 
 **Ne pas enregistrer ni partager cette commande : elle contient un jeton utilisable.** Aucun jeton n’est affiché par l’application. Sa durée de vie est de cinq minutes.
 
@@ -162,7 +185,7 @@ Le client OIDC **confidentiel** `catalog-loader` utilise un compte de service et
 Sur une installation vierge, le realm importé crée ce client et son compte de service ; Keycloak génère lui-même son secret. Pour mettre à niveau un realm déjà présent **sans réinitialiser les comptes**, puis récupérer le secret localement, utiliser depuis la racine du projet (Python 3 requis pour cet outil de configuration) :
 
 ```sh
-python3 scripts/configure-catalog-loader.py
+python3 infrastructure/keycloak/scripts/configure-catalog-loader.py
 ```
 
 Ce script utilise le **CLI officiel Keycloak `kcadm.sh`** dans le conteneur. Il configure uniquement le rôle `catalog-seed` et le client `catalog-loader`, réutilise les identifiants techniques initiaux du conteneur et peut être rejoué sans renouveler le secret. Il ne réimporte pas le realm, ne supprime aucun volume et ne change aucun mot de passe humain. Si le compte initial a changé, fournir des identifiants d’administration valides du realm `master` via les variables `KEYCLOAK_ADMIN_USER` et `KEYCLOAK_ADMIN_PASSWORD` ; ne pas inscrire le mot de passe dans l’historique du shell.
@@ -200,7 +223,7 @@ Avec Postman ou un outil similaire, obtenir d’abord un jeton OAuth 2.0 avec **
 
 Le jeton expire après cinq minutes dans cette démo. Aucun refresh token n’est émis par défaut : redemander un jeton avec les identifiants du client à expiration. Pour renouveler le secret, utiliser **Clients → catalog-loader → Credentials** dans la console native, puis rejouer le script pour synchroniser le fichier local. Cela ne révoque pas instantanément les JWT déjà émis auprès d’une API qui les valide localement ; leur expiration reste applicable.
 
-**Attention : chaque appel remplace intégralement le catalogue courant**, y compris les ajouts et modifications, et génère de nouveaux identifiants. Réponse : `200` avec `{"count":5}`. Les services préchargés sont Machine virtuelle, Serveur dédié, Stockage objet (forfait 1 To), Sauvegarde managée et Hébergement en baie. Le fichier source est `backend/data/demo_catalog.json`, embarqué dans le binaire : le modifier nécessite de reconstruire le backend, puis de rappeler la route.
+**Attention : chaque appel remplace intégralement le catalogue courant**, y compris les ajouts et modifications, et génère de nouveaux identifiants. Réponse : `200` avec `{"count":5}`. Les services préchargés sont Machine virtuelle, Serveur dédié, Stockage objet (forfait 1 To), Sauvegarde managée et Hébergement en baie. Le fichier source est `catalog-services/backend/data/demo_catalog.json`, embarqué dans le binaire : le modifier nécessite de reconstruire le backend, puis de rappeler la route.
 
 | Endpoint | Rôles | Réponse de succès |
 | --- | --- | --- |
@@ -279,14 +302,30 @@ Scénario pédagogique :
 
 ## Application tierce Cost Monitor et délégation offline
 
+Les deux headers affichent discrètement l’utilisateur connecté à côté du burger
+(initiales et nom sur ordinateur, pastille seule sur mobile avec le nom dans le
+menu). Le contenu de Cost Monitor commence directement par les coûts ou le
+bouton de connexion catalogue, sans bloc « Bonjour… ».
+
 **Cost Monitor**, sur <http://localhost:8082>, possède une connexion applicative
 Keycloak distincte, sans accès API. Une fois connecté, **Connecter mon catalogue**
 demande séparément le consentement de lecture des sélections et l’accès offline.
 Les deux identités doivent correspondre (issuer + `sub`). L’offline token reste
-côté serveur. Aucun traitement périodique à cette étape.
+côté serveur. Les alertes par sélection sont contrôlées toutes les minutes,
+même après déconnexion du navigateur.
+
+Cliquer sur une **cloche en contour** pour définir un seuil : elle devient
+**jaune et remplie**, avec le montant affiché. La même modale permet de modifier
+ou supprimer l’alerte. Un dépassement strict envoie un e-mail avec les services
+et leurs prix actuels, visible dans Mailpit ; aucun rappel pendant le dépassement.
+Après un dépassement notifié, le retour au seuil ou en dessous déclenche un
+e-mail unique **Retour à la normale** et réarme l’alerte. Aucun rappel tant que
+le total reste normal. Le destinataire vient du
+profil Keycloak validé, jamais d’un champ saisi. Compose autorise explicitement
+les adresses AD non vérifiées uniquement pour cette capture locale Mailpit.
 
 ```sh
-python3 scripts/configure-cost-monitor.py
+python3 infrastructure/keycloak/scripts/configure-cost-monitor.py
 docker compose --profile cost-monitor up --build -d --wait
 ```
 
@@ -305,7 +344,8 @@ L’intégration catalogue est conservée séparément par compte (`issuer` + `s
 elle est retrouvée à la reconnexion du même utilisateur, pas par un autre compte.
 Seul **Déconnecter le catalogue** en supprime explicitement les jetons locaux,
 pour toutes les sessions du compte. Le redémarrage du serveur perd les deux
-stockages, volontairement en mémoire.
+stockages et les alertes, volontairement en mémoire. Déconnecter le catalogue
+conserve les seuils mais suspend leur vérification jusqu’à sa reconnexion.
 Ces actions ne révoquent pas à elles seules le consentement distant Keycloak.
 
 ## Tests et vérifications
@@ -313,13 +353,13 @@ Ces actions ne révoquent pas à elles seules le consentement distant Keycloak.
 Sur la machine, avec Rust récent et Node ≥ 20.19 :
 
 ```sh
-cargo test --locked --manifest-path backend/Cargo.toml
-cargo clippy --locked --manifest-path backend/Cargo.toml --all-targets -- -D warnings
+cargo test --locked --manifest-path catalog-services/backend/Cargo.toml
+cargo clippy --locked --manifest-path catalog-services/backend/Cargo.toml --all-targets -- -D warnings
 cargo test --locked --manifest-path cost-monitor/Cargo.toml
 cargo clippy --locked --manifest-path cost-monitor/Cargo.toml --all-targets -- -D warnings
 ```
 
-Dans `frontend/` :
+Dans `catalog-services/frontend/` :
 
 ```sh
 npm ci
@@ -331,7 +371,7 @@ Les tests Rust lancent un serveur JWKS local avec une clé RSA de test et exerce
 
 Les tests du catalogue couvrent également le CRUD, les identifiants concurrents, le stockage partagé, le démarrage vide, le remplacement par le JSON prédéfini et les permissions de tous les nouveaux endpoints.
 
-Ils vérifient que le seed refuse `admin` seul (`403`), accepte `catalog-seed`, et que ce rôle technique ne permet ni lecture ni CRUD, ni accès à `/api/user` ou `/api/admin`. Une clé brute passée dans `X-API-Key` sans JWT reste refusée (`401`).
+Ils vérifient que le seed refuse `admin` seul (`403`), accepte `catalog-seed`, et que ce rôle technique ne permet ni lecture ni CRUD, ni accès aux sélections personnelles. Une clé brute passée dans `X-API-Key` sans JWT reste refusée (`401`).
 
 Les tests des sélections utilisent plusieurs identités JWT distinctes. Ils
 couvrent la propriété dans le domaine et le service (y compris avec un adapter
@@ -349,7 +389,7 @@ Avec les ports par défaut disponibles, démarrer uniquement l’IAM :
 docker compose up -d --wait keycloak mailpit
 ```
 
-Dans `backend/`, lancer le resource server avec les clés accessibles depuis la machine :
+Dans `catalog-services/backend/`, lancer le resource server avec les clés accessibles depuis la machine :
 
 ```sh
 OIDC_ISSUER=http://localhost:8081/realms/olaninc \
@@ -358,13 +398,13 @@ OIDC_JWKS_URL=http://localhost:8081/realms/olaninc/protocol/openid-connect/certs
 cargo run --locked
 ```
 
-Dans `frontend/`, lancer `npm ci`, puis `npm run dev`. Vite écoute sur `http://localhost:8080` et relaie `/api` vers `127.0.0.1:3000`. Ne pas lancer simultanément les services frontend/backend Docker sur ces mêmes ports. Pour une démonstration normale, préférer le démarrage entièrement Docker ci-dessus.
+Dans `catalog-services/frontend/`, lancer `npm ci`, puis `npm run dev`. Vite écoute sur `http://localhost:8080` et relaie `/api` vers `127.0.0.1:3000`. Ne pas lancer simultanément les services frontend/backend Docker sur ces mêmes ports. Pour une démonstration normale, préférer le démarrage entièrement Docker ci-dessus.
 
 ## Arrêter et remettre à zéro
 
 Le catalogue et les sélections n’ont pas de volume : **tout arrêt/redémarrage du
 backend les remet à vide**, même si les données IAM sont conservées. Cost Monitor
-perd également ses sessions et jetons locaux à son propre redémarrage.
+perd également ses sessions, jetons et alertes locaux à son propre redémarrage.
 
 ```sh
 # Arrêter en conservant comptes, mots de passe, OTP et e-mails
@@ -384,11 +424,11 @@ docker compose down --volumes
 docker compose up --build -d --wait
 ```
 
-L’import de `keycloak/olaninc-realm.json` s’exécute **uniquement si le realm n’existe pas**. Modifier ce fichier ne reconfigure pas un realm existant : appliquer la modification dans la console ou effectuer une remise à zéro volontaire.
+L’import de `infrastructure/keycloak/olaninc-realm.json` s’exécute **uniquement si le realm n’existe pas**. Modifier ce fichier ne reconfigure pas un realm existant : appliquer la modification dans la console ou effectuer une remise à zéro volontaire.
 
-Après une remise à zéro des volumes, Keycloak génère un nouveau secret pour `catalog-loader` : rejouer `python3 scripts/configure-catalog-loader.py` avant les appels de chargement pour synchroniser le fichier local. Pour ajouter seulement ce client à une installation existante, ce script suffit : aucune remise à zéro n’est nécessaire.
+Après une remise à zéro des volumes, Keycloak génère un nouveau secret pour `catalog-loader` : rejouer `python3 infrastructure/keycloak/scripts/configure-catalog-loader.py` avant les appels de chargement pour synchroniser le fichier local. Pour ajouter seulement ce client à une installation existante, ce script suffit : aucune remise à zéro n’est nécessaire.
 
-Pour Cost Monitor, rejouer également `python3 scripts/configure-cost-monitor.py`
+Pour Cost Monitor, rejouer également `python3 infrastructure/keycloak/scripts/configure-cost-monitor.py`
 puis recréer son conteneur afin qu’il charge le nouveau secret. Ne jamais
 réinitialiser les volumes pour une simple mise à jour des scopes ou du thème.
 
@@ -428,19 +468,21 @@ docker compose logs --tail=100 keycloak backend frontend mailpit
 
 ```text
 compose.yaml                  Services et réseau local
-keycloak/olaninc-realm.json    Configuration initiale reproductible
-frontend/                     Vue, keycloak-js, proxy Nginx
-backend/src/auth/mod.rs       Validation JWT, middleware et erreurs de sécurité
-backend/src/auth/jwks.rs      Récupération et cache des clés publiques
-backend/src/lib.rs            Routes et politiques de rôles
-backend/src/catalog/          Cœur catalogue, port et adaptateur REST
-backend/src/selections/       Domaine, règle de propriété, cas d’usage et REST
-backend/src/storage/          Adaptateur mémoire partagé catalogue/sélections
-backend/data/demo_catalog.json Catalogue fictif chargé uniquement par POST /seed
-scripts/configure-catalog-loader.py Configuration native du client technique et récupération locale du secret
-backend/tests/security.rs     Tests de sécurité sans IAM externe
-backend/tests/catalog_api.rs  Tests API et permissions du catalogue
-backend/tests/catalog_service.rs Tests applicatifs et stockage en mémoire
+infrastructure/keycloak/olaninc-realm.json Configuration initiale reproductible
+infrastructure/active-directory/        Image et initialisation de l’annuaire Samba
+catalog-services/frontend/              Vue, keycloak-js, proxy Nginx
+catalog-services/backend/src/auth/mod.rs Validation JWT, middleware et erreurs de sécurité
+catalog-services/backend/src/auth/jwks.rs Récupération et cache des clés publiques
+catalog-services/backend/src/lib.rs       Routes et politiques de rôles
+catalog-services/backend/src/catalog/     Cœur catalogue, port et adaptateur REST
+catalog-services/backend/src/selections/  Domaine, règle de propriété, cas d’usage et REST
+catalog-services/backend/src/storage/     Adaptateur mémoire partagé catalogue/sélections
+catalog-services/backend/data/demo_catalog.json Catalogue fictif chargé uniquement par POST /seed
+infrastructure/keycloak/scripts/         Configuration des clients Keycloak
+infrastructure/active-directory/scripts/ Configuration et vérification de la fédération AD
+catalog-services/backend/tests/security.rs Tests de sécurité sans IAM externe
+catalog-services/backend/tests/catalog_api.rs Tests API et permissions du catalogue
+catalog-services/backend/tests/catalog_service.rs Tests applicatifs et stockage en mémoire
 docs/architecture.md          Explications pédagogiques
 ```
 

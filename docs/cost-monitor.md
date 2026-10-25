@@ -4,14 +4,22 @@ Cost Monitor est une application Rust/Axum séparée, accessible sur
 <http://localhost:8082>. On se connecte d’abord à **Cost Monitor**, puis on
 autorise séparément l’accès au **catalogue**. La deuxième connexion permet de
 consulter les sélections personnelles et leurs coûts au nom du même utilisateur,
-en lecture seule. Aucun historique, alerte ou traitement périodique.
+en lecture seule. Des seuils configurables par sélection déclenchent des alertes
+e-mail, vérifiées chaque minute ; aucun historique de prix n’est conservé.
 
-L’interface garde un accueil « Bonjour… », un bouton de connexion catalogue
-mis en évidence et les coûts. Le burger **Menu du compte**, en haut à droite,
+L’interface affiche l’utilisateur dans le header (initiales et nom d’utilisateur),
+sans bloc « Bonjour… ». Un bouton de connexion catalogue reste mis en évidence
+dans une carte dédiée si nécessaire ; une fois connecté, les sélections et les
+coûts apparaissent directement. Le burger **Menu du compte**, en haut à droite,
 regroupe **Se déconnecter de Cost Monitor**, **Renouveler maintenant** si le
 catalogue est connecté et **Déconnecter le catalogue** si une intégration existe.
 Le menu est un popover HTML natif (clavier, Échap, clic extérieur), sans JavaScript.
 Les détails pédagogiques restent dans ce guide, pas dans le tableau de bord.
+Sur petit écran, seule la pastille reste visible dans le header ; le nom complet
+est consultable en tête du menu. Sur ordinateur, le nom est affiché dans le
+header uniquement, tronqué si nécessaire. Son libellé accessible et son titre
+conservent le texte complet. L’identité vient de la session OIDC authentifiée,
+sans affichage du champ e-mail ou du `sub` technique.
 Le logo et la favicon utilisent le même SVG dédié
 `cost-monitor/resources/logo.svg` : une baie de serveurs issue du symbole du
 catalogue, associée à un graphique de coûts, en bleu nuit et orange Ni².
@@ -22,7 +30,7 @@ Depuis la racine, avec les comptes et volumes existants conservés :
 
 ```sh
 docker compose up -d --wait keycloak mailpit
-python3 scripts/configure-cost-monitor.py
+python3 infrastructure/keycloak/scripts/configure-cost-monitor.py
 docker compose --profile cost-monitor up --build -d --wait
 ```
 
@@ -49,11 +57,12 @@ les installations existantes sans rotation de celui du client catalogue.
 Pour mettre à jour uniquement Cost Monitor sans vider les sélections du backend :
 
 ```sh
-python3 scripts/configure-cost-monitor.py
+python3 infrastructure/keycloak/scripts/configure-cost-monitor.py
 docker compose --profile cost-monitor up --build -d --no-deps --wait cost-monitor
 ```
 
-Les anciennes sessions mémoire de Cost Monitor sont perdues à son redémarrage.
+Les sessions, intégrations, seuils et états de notification mémoire de Cost Monitor
+sont perdus à son redémarrage.
 L’ancien callback unique `/oidc/callback` est remplacé par deux callbacks exacts.
 
 **Se déconnecter puis se reconnecter à la SPA après cette mise à niveau** :
@@ -91,8 +100,49 @@ vide son stockage en mémoire, donc le catalogue et les sélections.
    Les données restent accessibles : le serveur a échangé l’offline token
    auprès de Keycloak, sans nouvelle connexion interactive.
 7. Pour observer le renouvellement automatique à la lecture, attendre plus d’une
-   minute puis **Actualiser les coûts**. Il n’y a aucun minuteur de collecte :
-   une requête de page déclenche le renouvellement si nécessaire.
+   minute puis **Actualiser les coûts**. Une lecture ou un contrôle d’alerte
+   déclenche le renouvellement si nécessaire.
+
+### Configurer et démontrer une alerte
+
+1. Cliquer sur la **cloche en contour** d’une sélection : une modale permet de
+   saisir un seuil mensuel positif ou nul (deux décimales maximum, virgule ou point).
+2. Enregistrer : la cloche devient **jaune et remplie**, avec le seuil affiché.
+   Un nouveau clic permet de modifier le seuil ou de supprimer l’alerte.
+   Échap, Annuler ou un clic hors de la modale la ferme sans enregistrer.
+3. Dans le catalogue, avec un administrateur, augmenter le tarif d’un service
+   pour que le total dépasse strictement le seuil. Au prochain contrôle
+   (cadence de 60 secondes), consulter <http://localhost:8025> : l’e-mail
+   contient la sélection, ses services et prix actuels, le total et le seuil.
+4. Se déconnecter de Cost Monitor et du catalogue ne suspend pas la surveillance.
+   Aucun nouvel e-mail n’est envoyé tant que le dépassement continue.
+5. Ramener le total au seuil ou en dessous : au prochain contrôle, un e-mail
+   **Retour à la normale** est envoyé, avec la sélection et ses prix actuels.
+   Il n’est envoyé qu’après un dépassement déjà notifié, sans rappel tant que
+   le total reste au seuil ou en dessous. Augmenter ensuite le prix au-dessus
+   du seuil déclenche un nouvel e-mail de dépassement.
+
+Créer ou changer un seuil déjà dépassé déclenche l’alerte au prochain contrôle.
+Enregistrer une valeur inchangée ne réarme pas l’alerte. Un échec SMTP est retenté
+au contrôle suivant ; seule une acceptation SMTP acquitte la notification.
+Le retour à la normale réarme immédiatement l’alerte, même si son e-mail échoue.
+Cet e-mail est retenté tant que le total reste au seuil ou en dessous ; un nouveau
+dépassement annule un retour à la normale non envoyé devenu obsolète. Un changement
+de seuil réinitialise l’épisode, sans e-mail de retour à la normale artificiel.
+Ce n’est pas une garantie durable « exactement une fois » en cas de perte d’état.
+
+Le destinataire provient uniquement du claim `email` d’un **ID token validé** de
+la délégation catalogue (`openid profile email selections:read offline_access`).
+Aucun champ de formulaire ne permet de choisir une adresse. Par défaut,
+`email_verified=true` est exigé. Compose active explicitement
+`ALLOW_UNVERIFIED_ALERT_EMAIL=true` pour les adresses AD fictives, capturées
+uniquement par Mailpit. Hors de cette démo, ne pas conserver cette exception.
+Après ajout du scope `email`, reconnecter le catalogue pour recevoir ces claims.
+Une adresse absente ou non autorisée désactive l’enregistrement dans la modale.
+
+L’adaptateur SMTP métier utilise `SMTP_HOST`, `SMTP_PORT` et `SMTP_FROM` ; Compose
+le dirige vers `mailpit:1025`, sans TLS ni authentification, sur le réseau local.
+Ces alertes ne passent pas par l’API d’administration ou les e-mails IAM Keycloak.
 
 Les access tokens du **client de délégation catalogue seulement** durent 60 secondes pour rendre la
 démo observable ; ceux de la SPA et de `catalog-loader` gardent leur durée de
@@ -121,7 +171,8 @@ renouvellement ne signifie pas révocation instantanée de chaque JWT**.
 
 - **Déconnecter le catalogue** : effacer les jetons et l’affichage de cette
   intégration **pour toutes les sessions du même compte**, invalider ses
-  tentatives en cours, mais rester connecté à Cost Monitor.
+  tentatives en cours, mais rester connecté à Cost Monitor. Les seuils restent
+  enregistrés en mémoire ; les contrôles sont suspendus jusqu’à la reconnexion.
 - **Se déconnecter de Cost Monitor** : fermer uniquement la session navigateur
   et annuler ses autorisations en cours. L’intégration déjà établie et son
   offline token restent rattachés au compte côté serveur.
@@ -133,7 +184,8 @@ Session navigateur (identifiant aléatoire)
 └── identité authentifiée + CSRF + expiration locale
 
 Intégration du compte (issuer + sub)
-└── access token + offline token + nonce + expiration + compteur
+├── access token + offline token + nonce + expiration + compteur
+└── seuils par sélection + état de notification
 ```
 
 Test simple : connecter `user1` et son catalogue, se déconnecter de Cost Monitor,
@@ -149,7 +201,14 @@ Aucune de ces actions ne prétend fermer le SSO global ou révoquer le consentem
 offline distant. La prochaine connexion à Cost Monitor redemande une
 authentification et permet donc de saisir un autre utilisateur sans devoir se
 déconnecter au préalable depuis le catalogue. Un redémarrage perd les sessions
-et intégrations locales, puisque tout est en mémoire.
+et intégrations locales, y compris leurs alertes, puisque tout est en mémoire.
+
+Le contrôleur vérifie jusqu’à huit comptes en parallèle, sans chevauchement de
+cycles. Une lecture échouée ne réarme ni n’acquitte une alerte. Un instantané
+réussi supprime les règles des sélections supprimées. Le header
+`x-catalog-instance` identifie la génération du backend : son changement efface
+les anciens seuils pour qu’un identifiant numérique réutilisé ne les hérite pas.
+Sans ce header, aucun contrôle ni nouvel enregistrement d’alerte n’est effectué.
 
 La session applicative locale a une durée propre de 24 heures ; elle n’est pas
 automatiquement fermée par la déconnexion SSO d’une autre application. Aucun
@@ -205,7 +264,9 @@ capacités du client donne `403`. Aucun appel d’administration IAM dans Rust.
 - Cookie de session opaque aléatoire 256 bits, `HttpOnly`, `SameSite=Lax` ;
   `Secure` automatiquement en HTTPS. Ce projet reste en HTTP **local seulement**.
 - Actions POST protégées par origine exacte et jeton CSRF ; pages non mises en
-  cache, HTML échappé, CSP sans script et protection contre l’encapsulation.
+  cache, HTML échappé, CSP limitée aux scripts de même origine et protection
+  contre l’encapsulation. Le petit contrôleur externe `/dialogs.js` manipule les
+  modales natives `<dialog>` ; aucun script inline n’est autorisé.
   `Referrer-Policy: strict-origin` évite de transmettre le code OIDC dans un
   referer tout en préservant l’en-tête Origin des formulaires.
   La CSP autorise les formulaires uniquement vers Cost Monitor et l’origine
@@ -239,8 +300,8 @@ capacités du client donne `403`. Aucun appel d’administration IAM dans Rust.
 ## Vérifications
 
 ```sh
-cargo test --locked --manifest-path backend/Cargo.toml
-cargo clippy --locked --manifest-path backend/Cargo.toml --all-targets -- -D warnings
+cargo test --locked --manifest-path catalog-services/backend/Cargo.toml
+cargo clippy --locked --manifest-path catalog-services/backend/Cargo.toml --all-targets -- -D warnings
 cargo test --locked --manifest-path cost-monitor/Cargo.toml
 cargo clippy --locked --manifest-path cost-monitor/Cargo.toml --all-targets -- -D warnings
 ```
@@ -254,6 +315,10 @@ des logins, identités incompatibles, annulation des callbacks et conservation d
 login applicatif après déconnexion/révocation catalogue, restauration de
 l’intégration après logout/expiration de session, isolation par issuer et sub,
 suppression globale au compte et rotation concurrente partagée entre sessions.
+Les tests d’alerte couvrent les montants exacts, le dépassement strict, le
+réarmement, le retour à la normale (égalité incluse), l’absence de doublons,
+les échecs de lecture/SMTP, le contrôle après
+logout, la politique de destinataire et le nettoyage après suppression/redémarrage.
 
 Références officielles : [Keycloak Offline access](https://www.keycloak.org/docs/26.8.1/server_admin/#_offline-access),
 [client scopes](https://www.keycloak.org/docs/26.8.1/server_admin/#_client_scopes).

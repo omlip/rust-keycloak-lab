@@ -1,12 +1,14 @@
 use crate::{
+    alerts, catalog,
     integrations::{ConnectionError, Integration, Integrations},
+    mail::{CostAlert, Mailer},
     oidc::{Oidc, OidcError, Purpose},
     sessions::{self, CatalogBinding, LIMIT, LOGIN_TTL, Pending, SESSION_TTL, Session, Sessions},
     view,
 };
 use axum::{
     Router,
-    extract::{Form, Query, Request, State},
+    extract::{Form, Path, Query, Request, State},
     http::{HeaderMap, StatusCode, header},
     middleware::{self, Next},
     response::{Html, IntoResponse, Redirect, Response},
@@ -22,6 +24,7 @@ pub struct Config {
     pub origin: String,
     pub issuer: String,
     pub api: String,
+    pub allow_unverified_email: bool,
 }
 struct App {
     login_oidc: Oidc,
@@ -30,22 +33,30 @@ struct App {
     sessions: Sessions,
     integrations: Integrations,
     http: reqwest::Client,
+    mailer: Arc<dyn Mailer>,
 }
 
-pub fn app(login_oidc: Oidc, catalog_oidc: Oidc, config: Config) -> Router {
+pub fn app(
+    login_oidc: Oidc,
+    catalog_oidc: Oidc,
+    config: Config,
+    mailer: Arc<dyn Mailer>,
+) -> (Router, tokio::task::JoinHandle<()>) {
     let state = Arc::new(App {
         login_oidc,
         catalog_oidc,
         config,
         sessions: Sessions::default(),
         integrations: Integrations::default(),
+        mailer,
         http: reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .timeout(Duration::from_secs(15))
             .build()
             .expect("HTTP client"),
     });
-    router(state)
+    let worker = start_monitoring(state.clone());
+    (router(state), worker)
 }
 
 fn router(state: Arc<App>) -> Router {
@@ -58,6 +69,17 @@ fn router(state: Arc<App>) -> Router {
         .route("/catalog/refresh", post(refresh))
         .route("/catalog/disconnect", post(disconnect_catalog))
         .route("/logout", post(logout))
+        .route("/alerts/{id}", post(save_alert))
+        .route("/alerts/{id}/delete", post(delete_alert))
+        .route(
+            "/dialogs.js",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "application/javascript")],
+                    include_str!("../resources/dialogs.js"),
+                )
+            }),
+        )
         .route("/health", get(|| async { "ok" }))
         .route(
             "/logo.svg",
@@ -94,7 +116,7 @@ async fn security_headers(State(app): State<Arc<App>>, request: Request, next: N
         .map(|url| url.origin().ascii_serialization())
         .unwrap_or_default();
     let csp = format!(
-        "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; form-action 'self' {issuer_origin}; frame-ancestors 'none'; base-uri 'none'"
+        "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self'; form-action 'self' {issuer_origin}; frame-ancestors 'none'; base-uri 'none'"
     );
     headers.insert(
         "content-security-policy",
@@ -440,42 +462,215 @@ async fn render(app: &App, session: &mut Session, force: bool) -> String {
         return view::welcome();
     }
     let Some(integration) = app.integrations.get(&session.identity).await else {
-        return view::dashboard(session, None, &[], None);
+        return view::dashboard(
+            session,
+            None,
+            &[],
+            None,
+            &alerts::BudgetRules::default(),
+            app.config.allow_unverified_email,
+        );
     };
     // Serialize rotation across all sessions of this account. No global map
     // lock is held while contacting Keycloak or the API.
     let mut integration = integration.lock().await;
-    let mut message = renew(app, &mut integration, force).await.err();
-    let mut selections = Vec::new();
-    if message.is_none()
-        && let Some(tokens) = integration.catalog.as_ref().and_then(|c| c.tokens.as_ref())
+    let (selections, message) = match fetch_catalog(app, &mut integration, force).await {
+        Ok(Some(snapshot)) => (snapshot.selections, None),
+        Ok(None) => (vec![], None),
+        Err(message) => (vec![], Some(message)),
+    };
+    view::dashboard(
+        session,
+        integration.catalog.as_ref(),
+        &selections,
+        message,
+        &integration.budgets,
+        app.config.allow_unverified_email,
+    )
+}
+
+async fn fetch_catalog(
+    app: &App,
+    integration: &mut Integration,
+    force: bool,
+) -> Result<Option<catalog::Snapshot>, &'static str> {
+    renew(app, integration, force).await?;
+    let Some(tokens) = integration.catalog.as_ref().and_then(|c| c.tokens.as_ref()) else {
+        return Ok(None);
+    };
+    let snapshot = catalog::read(&app.http, &app.config.api, tokens.access.secret()).await?;
+    if let Some(instance) = &snapshot.instance {
+        integration.budgets.synchronize(
+            instance,
+            &snapshot.selections.iter().map(|s| s.id).collect::<Vec<_>>(),
+        );
+    }
+    Ok(Some(snapshot))
+}
+
+fn valid_recipient(integration: &Integration, allow_unverified: bool) -> Option<&str> {
+    let recipient = integration
+        .catalog
+        .as_ref()?
+        .tokens
+        .as_ref()?
+        .recipient
+        .as_ref()?;
+    if (!recipient.verified && !allow_unverified)
+        || recipient
+            .address
+            .parse::<lettre::message::Mailbox>()
+            .is_err()
     {
-        let response = app
-            .http
-            .get(format!("{}/api/selections", app.config.api))
-            .bearer_auth(tokens.access.secret())
-            .send()
-            .await;
-        match response {
-            Ok(response) if response.status().is_success() => {
-                match response.json::<Vec<view::Selection>>().await {
-                    Ok(items) => selections = items,
-                    Err(_) => message = Some("Réponse du catalogue incompatible."),
+        return None;
+    }
+    Some(&recipient.address)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AlertInput {
+    csrf: String,
+    threshold: String,
+}
+
+async fn save_alert(
+    State(app): State<Arc<App>>,
+    headers: HeaderMap,
+    Path(id): Path<u64>,
+    Form(input): Form<AlertInput>,
+) -> Result<Response, Error> {
+    let (_, session) = authorized_session(&app, &headers, &Action { csrf: input.csrf }).await?;
+    let value = session.lock().await;
+    value
+        .ensure_account(&value.identity)
+        .map_err(connection_error)?;
+    let slot = app.integrations.get(&value.identity).await.ok_or(Error(
+        StatusCode::CONFLICT,
+        "Connecte d’abord ton catalogue.",
+    ))?;
+    let mut integration = slot.lock().await;
+    let snapshot = fetch_catalog(&app, &mut integration, false)
+        .await
+        .map_err(|m| Error(StatusCode::BAD_GATEWAY, m))?
+        .ok_or(Error(StatusCode::CONFLICT, "Reconnecte ton catalogue."))?;
+    if snapshot.instance.is_none() {
+        return Err(Error(
+            StatusCode::BAD_GATEWAY,
+            "Le catalogue doit être mis à jour pour activer la surveillance.",
+        ));
+    }
+    if !snapshot.selections.iter().any(|s| s.id == id) {
+        return Err(Error(StatusCode::NOT_FOUND, "Sélection introuvable."));
+    }
+    if valid_recipient(&integration, app.config.allow_unverified_email).is_none() {
+        return Err(Error(
+            StatusCode::BAD_REQUEST,
+            "Une adresse e-mail autorisée est nécessaire. Vérifie ton profil Keycloak puis reconnecte le catalogue.",
+        ));
+    }
+    let cents =
+        alerts::parse_euros(&input.threshold).map_err(|m| Error(StatusCode::BAD_REQUEST, m))?;
+    integration
+        .budgets
+        .configure(id, cents)
+        .map_err(|m| Error(StatusCode::BAD_REQUEST, m))?;
+    Ok(Redirect::to("/").into_response())
+}
+
+async fn delete_alert(
+    State(app): State<Arc<App>>,
+    headers: HeaderMap,
+    Path(id): Path<u64>,
+    Form(action): Form<Action>,
+) -> Result<Response, Error> {
+    let (_, session) = authorized_session(&app, &headers, &action).await?;
+    let value = session.lock().await;
+    value
+        .ensure_account(&value.identity)
+        .map_err(connection_error)?;
+    let slot = app
+        .integrations
+        .get(&value.identity)
+        .await
+        .ok_or(Error(StatusCode::NOT_FOUND, "Alerte introuvable."))?;
+    if slot.lock().await.budgets.rules.remove(&id).is_none() {
+        return Err(Error(StatusCode::NOT_FOUND, "Alerte introuvable."));
+    }
+    Ok(Redirect::to("/").into_response())
+}
+
+fn start_monitoring(app: Arc<App>) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            check_once(app.clone()).await;
+        }
+    })
+}
+
+async fn check_once(app: Arc<App>) {
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(8));
+    let mut tasks = tokio::task::JoinSet::new();
+    for slot in app.integrations.entries().await {
+        let app = app.clone();
+        let semaphore = semaphore.clone();
+        tasks.spawn(async move {
+            let Ok(_permit) = semaphore.acquire_owned().await else {
+                return;
+            };
+            let mut integration = slot.lock().await;
+            if integration.budgets.rules.is_empty()
+                || integration
+                    .catalog
+                    .as_ref()
+                    .and_then(|c| c.tokens.as_ref())
+                    .is_none()
+            {
+                return;
+            }
+            let snapshot = match fetch_catalog(&app, &mut integration, false).await {
+                Ok(Some(snapshot)) if snapshot.instance.is_some() => snapshot,
+                _ => return,
+            };
+            let recipient =
+                valid_recipient(&integration, app.config.allow_unverified_email).map(str::to_owned);
+            for selection in &snapshot.selections {
+                let Some(rule) = integration.budgets.rules.get_mut(&selection.id) else {
+                    continue;
+                };
+                let Some(notification) = rule.notification(selection.monthly_total_cents) else {
+                    continue;
+                };
+                let Some(recipient) = recipient.as_deref() else {
+                    continue;
+                };
+                if app
+                    .mailer
+                    .send(CostAlert {
+                        recipient,
+                        selection,
+                        threshold: rule.threshold_cents,
+                        notification,
+                    })
+                    .await
+                    .is_ok()
+                {
+                    rule.delivered(notification);
+                } else {
+                    eprintln!("Cost monitoring: email delivery failed; retry on next check.");
                 }
             }
-            Ok(response) if response.status() == StatusCode::FORBIDDEN => {
-                message =
-                    Some("L’accès à tes sélections n’est plus autorisé. Reconnecte ton catalogue.")
-            }
-            Ok(_) => {
-                message = Some(
-                    "Le catalogue a refusé la consultation. Réessaie ou reconnecte ton compte.",
-                )
-            }
-            Err(_) => message = Some("Le catalogue est temporairement indisponible."),
+        });
+    }
+    while let Some(result) = tasks.join_next().await {
+        if result.is_err() {
+            eprintln!("Cost monitoring: an account check failed.");
         }
     }
-    view::dashboard(session, integration.catalog.as_ref(), &selections, message)
 }
 
 async fn home(State(app): State<Arc<App>>, headers: HeaderMap) -> Html<String> {
@@ -584,6 +779,272 @@ mod tests {
     use serde_json::json;
     use tower::ServiceExt;
 
+    #[derive(Default)]
+    struct TestMailer {
+        sent: tokio::sync::Mutex<Vec<(String, u64, u64, alerts::Notification)>>,
+        fail: std::sync::atomic::AtomicBool,
+    }
+    impl Mailer for TestMailer {
+        fn send<'a>(
+            &'a self,
+            alert: CostAlert<'a>,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), ()>> + Send + 'a>>
+        {
+            Box::pin(async move {
+                if self.fail.load(std::sync::atomic::Ordering::SeqCst) {
+                    return Err(());
+                }
+                self.sent.lock().await.push((
+                    alert.recipient.to_owned(),
+                    alert.selection.id,
+                    alert.threshold,
+                    alert.notification,
+                ));
+                Ok(())
+            })
+        }
+    }
+
+    fn watched_selection(total: u64) -> serde_json::Value {
+        json!([{"id":1,"name":"Montréal","monthly_total_cents":total,
+            "services":[{"name":"VM","monthly_price_cents":total}]}])
+    }
+
+    async fn add_verified_account(
+        app: &App,
+    ) -> (String, String, Arc<tokio::sync::Mutex<Integration>>) {
+        let identity = Identity {
+            issuer: app.config.issuer.clone(),
+            subject: "alice".into(),
+            name: "Alice".into(),
+        };
+        let slot = attach_test_integration(app, &identity).await;
+        slot.lock()
+            .await
+            .catalog
+            .as_mut()
+            .unwrap()
+            .tokens
+            .as_mut()
+            .unwrap()
+            .recipient = Some(alerts::Recipient {
+            address: "alice@example.test".into(),
+            verified: true,
+        });
+        let session = Session::new(identity);
+        let csrf = session.csrf.clone();
+        let id = app.sessions.insert(session).await.unwrap();
+        (id, csrf, slot)
+    }
+
+    #[tokio::test]
+    async fn budget_forms_require_session_csrf_ownership_valid_amount_and_account_email() {
+        let data = Arc::new(tokio::sync::RwLock::new(watched_selection(2500)));
+        let (app, router, server, _) =
+            fixture_full(None, Arc::new(TestMailer::default()), data).await;
+        let (id, csrf, slot) = add_verified_account(&app).await;
+        for (who, token, path, value, expected) in [
+            (
+                "unknown",
+                csrf.as_str(),
+                "/alerts/1",
+                "20.00",
+                StatusCode::UNAUTHORIZED,
+            ),
+            (
+                id.as_str(),
+                "forged",
+                "/alerts/1",
+                "20.00",
+                StatusCode::FORBIDDEN,
+            ),
+            (
+                id.as_str(),
+                csrf.as_str(),
+                "/alerts/999",
+                "20.00",
+                StatusCode::NOT_FOUND,
+            ),
+            (
+                id.as_str(),
+                csrf.as_str(),
+                "/alerts/1",
+                "-1",
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                id.as_str(),
+                csrf.as_str(),
+                "/alerts/1",
+                "20.00",
+                StatusCode::SEE_OTHER,
+            ),
+        ] {
+            let response = router
+                .clone()
+                .oneshot(
+                    axum::http::Request::builder()
+                        .method("POST")
+                        .uri(path)
+                        .header(header::ORIGIN, "http://localhost:8082")
+                        .header(header::COOKIE, format!("cm_session={who}"))
+                        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                        .body(Body::from(format!("csrf={token}&threshold={value}")))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), expected);
+        }
+        assert_eq!(slot.lock().await.budgets.rules[&1].threshold_cents, 2000);
+        slot.lock()
+            .await
+            .catalog
+            .as_mut()
+            .unwrap()
+            .tokens
+            .as_mut()
+            .unwrap()
+            .recipient
+            .as_mut()
+            .unwrap()
+            .verified = false;
+        assert!(valid_recipient(&*slot.lock().await, false).is_none());
+        assert_eq!(
+            valid_recipient(&*slot.lock().await, true),
+            Some("alice@example.test")
+        );
+        let bob = Session::new(Identity {
+            issuer: app.config.issuer.clone(),
+            subject: "bob".into(),
+            name: "Bob".into(),
+        });
+        let bob_csrf = bob.csrf.clone();
+        let bob_id = app.sessions.insert(bob).await.unwrap();
+        assert_eq!(
+            action_request(&router, &bob_id, &bob_csrf, "/alerts/1/delete")
+                .await
+                .status(),
+            StatusCode::NOT_FOUND
+        );
+        assert!(slot.lock().await.budgets.rules.contains_key(&1));
+        assert_eq!(
+            action_request(&router, &id, &csrf, "/alerts/1/delete")
+                .await
+                .status(),
+            StatusCode::SEE_OTHER
+        );
+        assert!(slot.lock().await.budgets.rules.is_empty());
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn worker_does_not_send_recovery_without_a_delivered_exceedance() {
+        let data = Arc::new(tokio::sync::RwLock::new(watched_selection(1500)));
+        let mailer = Arc::new(TestMailer::default());
+        let (app, _, server, _) = fixture_full(None, mailer.clone(), data.clone()).await;
+        let (_, _, slot) = add_verified_account(&app).await;
+        {
+            let mut entry = slot.lock().await;
+            entry.budgets.synchronize("test-instance", &[1]);
+            entry.budgets.configure(1, 2000).unwrap();
+        }
+        check_once(app.clone()).await;
+        *data.write().await = watched_selection(2500);
+        mailer.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+        check_once(app.clone()).await;
+        *data.write().await = watched_selection(1500);
+        mailer
+            .fail
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+        check_once(app.clone()).await;
+        assert!(mailer.sent.lock().await.is_empty());
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn worker_runs_after_logout_sends_once_rearms_and_retries_failed_delivery() {
+        let data = Arc::new(tokio::sync::RwLock::new(watched_selection(2500)));
+        let mailer = Arc::new(TestMailer::default());
+        let (app, router, server, _) = fixture_full(None, mailer.clone(), data.clone()).await;
+        let (id, csrf, slot) = add_verified_account(&app).await;
+        {
+            let mut entry = slot.lock().await;
+            entry.budgets.synchronize("test-instance", &[1]);
+            entry.budgets.configure(1, 2000).unwrap();
+        }
+        assert_eq!(
+            action_request(&router, &id, &csrf, "/logout")
+                .await
+                .status(),
+            StatusCode::SEE_OTHER
+        );
+        check_once(app.clone()).await;
+        check_once(app.clone()).await;
+        assert_eq!(
+            mailer.sent.lock().await.as_slice(),
+            &[(
+                "alice@example.test".into(),
+                1,
+                2000,
+                alerts::Notification::Exceeded
+            )]
+        );
+        *data.write().await = serde_json::Value::Null;
+        check_once(app.clone()).await;
+        *data.write().await = watched_selection(3000);
+        check_once(app.clone()).await;
+        assert_eq!(mailer.sent.lock().await.len(), 1); // Failed reads must not rearm.
+        *data.write().await = watched_selection(2000);
+        mailer.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+        check_once(app.clone()).await;
+        assert_eq!(mailer.sent.lock().await.len(), 1);
+        mailer
+            .fail
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+        check_once(app.clone()).await;
+        check_once(app.clone()).await;
+        assert_eq!(mailer.sent.lock().await.len(), 2);
+        assert_eq!(
+            mailer.sent.lock().await[1],
+            (
+                "alice@example.test".into(),
+                1,
+                2000,
+                alerts::Notification::Recovered
+            )
+        );
+        *data.write().await = watched_selection(2500);
+        check_once(app.clone()).await;
+        assert_eq!(mailer.sent.lock().await.len(), 3);
+        assert_eq!(
+            mailer.sent.lock().await[2].3,
+            alerts::Notification::Exceeded
+        );
+        slot.lock().await.budgets.configure(1, 1900).unwrap();
+        mailer.fail.store(true, std::sync::atomic::Ordering::SeqCst);
+        check_once(app.clone()).await;
+        assert_eq!(mailer.sent.lock().await.len(), 3);
+        mailer
+            .fail
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+        check_once(app.clone()).await;
+        assert_eq!(mailer.sent.lock().await.len(), 4);
+        slot.lock().await.budgets.configure(1, 1900).unwrap();
+        check_once(app.clone()).await;
+        assert_eq!(mailer.sent.lock().await.len(), 4);
+        *data.write().await = json!([]);
+        check_once(app.clone()).await;
+        assert!(slot.lock().await.budgets.rules.is_empty());
+        slot.lock().await.budgets.configure(1, 10).unwrap();
+        slot.lock().await.catalog.as_mut().unwrap().expires = Instant::now();
+        *data.write().await = watched_selection(2500);
+        check_once(app.clone()).await;
+        assert!(slot.lock().await.catalog.as_ref().unwrap().tokens.is_none());
+        assert_eq!(mailer.sent.lock().await.len(), 4);
+        server.abort();
+    }
+
     async fn fixture() -> (Arc<App>, Router, tokio::task::JoinHandle<()>) {
         let (app, router, server, _) = fixture_with_refresh(None).await;
         (app, router, server)
@@ -591,6 +1052,24 @@ mod tests {
 
     async fn fixture_with_refresh(
         refresh: Option<serde_json::Value>,
+    ) -> (
+        Arc<App>,
+        Router,
+        tokio::task::JoinHandle<()>,
+        Arc<std::sync::atomic::AtomicUsize>,
+    ) {
+        fixture_full(
+            refresh,
+            Arc::new(TestMailer::default()),
+            Arc::new(tokio::sync::RwLock::new(json!([]))),
+        )
+        .await
+    }
+
+    async fn fixture_full(
+        refresh: Option<serde_json::Value>,
+        mailer: Arc<dyn Mailer>,
+        selections: Arc<tokio::sync::RwLock<serde_json::Value>>,
     ) -> (
         Arc<App>,
         Router,
@@ -631,7 +1110,24 @@ mod tests {
                     }
                 }),
             )
-            .route("/api/selections", get(|| async { Json(json!([])) }));
+            .route(
+                "/api/selections",
+                get(move || {
+                    let selections = selections.clone();
+                    async move {
+                        let value = selections.read().await.clone();
+                        (
+                            if value.is_null() {
+                                StatusCode::SERVICE_UNAVAILABLE
+                            } else {
+                                StatusCode::OK
+                            },
+                            [("x-catalog-instance", "test-instance")],
+                            Json(value),
+                        )
+                    }
+                }),
+            );
         let server = tokio::spawn(async move {
             axum::serve(listener, mock).await.unwrap();
         });
@@ -660,10 +1156,12 @@ mod tests {
                 origin: "http://localhost:8082".into(),
                 issuer: base.clone(),
                 api: base,
+                allow_unverified_email: false,
             },
             sessions: Sessions::default(),
             integrations: Integrations::default(),
             http: reqwest::Client::new(),
+            mailer,
         });
         (state.clone(), router(state), server, calls)
     }
@@ -758,6 +1256,7 @@ mod tests {
             .attach_catalog(
                 identity,
                 Tokens {
+                    recipient: None,
                     access: AccessToken::new("private-access".into()),
                     offline: RefreshToken::new("private-offline".into()),
                     lifetime: Duration::from_secs(60),
@@ -1075,7 +1574,7 @@ mod tests {
                 .tokens
                 .is_none()
         );
-        assert!(html.contains("Bonjour Alice"));
+        assert!(html.contains("Connecté en tant que Alice"));
         assert!(html.contains("Reconnecter mon catalogue"));
         assert!(!html.contains("private-access") && !html.contains("private-offline"));
         server.abort();

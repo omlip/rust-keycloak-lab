@@ -1,7 +1,9 @@
+use cost_monitor::mail::SmtpMailer;
 use cost_monitor::{
     oidc::{Oidc, Purpose},
     web::{self, Config},
 };
+use std::sync::Arc;
 use std::{env, error::Error, time::Duration};
 
 #[tokio::main]
@@ -65,21 +67,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!(
         "Cost Monitor ready: independent application login and optional offline catalogue delegation."
     );
-    axum::serve(
-        listener,
-        web::app(
-            login_client,
-            catalog_client,
-            Config {
-                origin,
-                issuer,
-                api,
-            },
-        ),
-    )
-    .with_graceful_shutdown(async {
-        let _ = tokio::signal::ctrl_c().await;
-    })
-    .await?;
+    let mailer = Arc::new(SmtpMailer::new(
+        &env::var("SMTP_HOST").unwrap_or_else(|_| "localhost".into()),
+        env::var("SMTP_PORT")
+            .unwrap_or_else(|_| "1025".into())
+            .parse()?,
+        &env::var("SMTP_FROM")
+            .unwrap_or_else(|_| "Cost Monitor <cost-monitor@olaninc.test>".into()),
+        &origin,
+    )?);
+    let (application, monitoring) = web::app(
+        login_client,
+        catalog_client,
+        Config {
+            origin,
+            issuer,
+            api,
+            allow_unverified_email: env::var("ALLOW_UNVERIFIED_ALERT_EMAIL").as_deref()
+                == Ok("true"),
+        },
+        mailer,
+    );
+    let result = axum::serve(listener, application)
+        .with_graceful_shutdown(async {
+            let _ = tokio::signal::ctrl_c().await;
+        })
+        .await;
+    monitoring.abort();
+    result?;
     Ok(())
 }

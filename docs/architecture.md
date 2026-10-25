@@ -21,6 +21,7 @@ Les ports navigateur peuvent être adaptés pour Vue et Mailpit ; ces exemples u
 | Axum | Validation du jeton d’accès, contrôle des rôles et exposition REST du catalogue | Redirection vers la connexion, échange de code, gestion des utilisateurs |
 | Keycloak | Identités, sessions, authentification, mots de passe, OTP, rôles, consoles, e-mails | Logique métier de l’API |
 | Mailpit | Capture et consultation locale des messages SMTP | Distribution de vrais e-mails |
+| Cost Monitor | Délégation catalogue en lecture seule, seuils, contrôle chaque minute et e-mails métier | Modification du catalogue ou administration IAM |
 
 Rust n’utilise pas de base de données : le catalogue est uniquement en mémoire et disparaît au redémarrage du backend. Les données IAM de Keycloak et les messages Mailpit sont persistés dans deux volumes Docker distincts.
 
@@ -37,7 +38,7 @@ Vue ── OIDC/PKCE ──→ Keycloak ── LDAPS + compte de lecture ──�
 Rust ←── Bearer JWT émis par Keycloak, quelle que soit l’origine du compte
 ```
 
-`scripts/configure-ad.py` initialise les secrets locaux et le domaine, monte
+`infrastructure/active-directory/scripts/configure-ad.py` initialise les secrets locaux et le domaine, monte
 l’autorité publique Samba dans le truststore Keycloak, puis utilise le CLI
 officiel pour configurer le fournisseur LDAP en lecture seule. Les mots de passe
 sont vérifiés dans l’annuaire ; seuls les profils sont importés. `objectGUID`
@@ -116,7 +117,7 @@ Service appelant ── Authorization: Bearer JWT ──→ Rust /api/catalog/se
 
 Le secret authentifie le client auprès de **Keycloak**, pas auprès de Rust. Ce n’est pas une clé statique `X-API-Key`. Les contrôles de signature, expiration, issuer, audience et type de jeton existants s’appliquent aussi aux jetons techniques. Aucun refresh token n’est émis par défaut ; le client renouvelle son accès par une nouvelle demande Client Credentials.
 
-Le realm JSON initialise ce client sans secret prédéfini : Keycloak le génère. Pour une installation existante, `scripts/configure-catalog-loader.py` applique uniquement cette configuration avec le CLI officiel `kcadm.sh`, sans remplacer le realm ni les comptes humains. La configuration client et ses mappers sont lus depuis le même JSON que l’import initial. L’authentification d’administration est réservée à cette maintenance, jamais au backend applicatif. Le secret est récupéré dans `.secrets/catalog-loader.secret`, fichier local ignoré et limité au propriétaire ; aucune valeur n’est fournie à Vue ou Rust.
+Le realm JSON initialise ce client sans secret prédéfini : Keycloak le génère. Pour une installation existante, `infrastructure/keycloak/scripts/configure-catalog-loader.py` applique uniquement cette configuration avec le CLI officiel `kcadm.sh`, sans remplacer le realm ni les comptes humains. La configuration client et ses mappers sont lus depuis le même JSON que l’import initial. L’authentification d’administration est réservée à cette maintenance, jamais au backend applicatif. Le secret est récupéré dans `.secrets/catalog-loader.secret`, fichier local ignoré et limité au propriétaire ; aucune valeur n’est fournie à Vue ou Rust.
 
 Références officielles Keycloak 26.8.1 : [Using a service account](https://www.keycloak.org/docs/26.8.1/server_admin/#_service_accounts), [Client credentials](https://www.keycloak.org/securing-apps/oidc-layers#_client_credentials), [Audience support](https://www.keycloak.org/docs/26.8.1/server_admin/#audience-support). Les rôles du jeton sont l’intersection des rôles du compte de service et des rôles autorisés par les scope mappings. Le rôle `catalog-seed` est notre permission applicative, pas une fonction intégrée de Keycloak ni une preuve intrinsèque qu’un sujet est une machine : nous le réservons au compte technique dans la configuration.
 
@@ -124,8 +125,8 @@ Références officielles Keycloak 26.8.1 : [Using a service account](https://www
 
 | Permission | Nature | Effet |
 | --- | --- | --- |
-| `users` | Rôle de realm applicatif | `/api/user` et consultation du catalogue |
-| `admin` | Rôle de realm applicatif | `/api/user`, `/api/admin`, consultation et CRUD du catalogue, sans seed |
+| `users` | Rôle de realm applicatif | Consultation du catalogue et gestion de ses sélections |
+| `admin` | Rôle de realm applicatif | Consultation et CRUD du catalogue, gestion de ses sélections, sans seed |
 | `catalog-seed` | Rôle de realm applicatif réservé au compte technique | Uniquement `POST /api/catalog/seed` |
 | `realm-management:realm-admin` | Rôle client d’administration Keycloak | Administration complète de `olaninc` |
 
@@ -133,13 +134,13 @@ Références officielles Keycloak 26.8.1 : [Using a service account](https://www
 
 Le compte technique `bootstrap-admin` est créé dans `master`, séparément de l’import du realm. Le compte `demo-admin` ne peut pas administrer `master`, créer d’autres realms ou administrer l’instance entière. Il peut néanmoins modifier toute la configuration de `olaninc`, y compris casser les clients ou modifier les permissions : c’est le niveau de droits choisi pour cet exercice.
 
-L’utilisateur administrateur ne reçoit pas forcément `users` : le backend autorise explicitement **users OU admin** sur l’endpoint utilisateur.
+L’utilisateur administrateur ne reçoit pas forcément `users` : le backend autorise explicitement **users OU admin** pour consulter le catalogue et gérer ses sélections.
 
 ## 5. Validation dans Rust
 
 `headers` lit le schéma Bearer, `jsonwebtoken` effectue la validation cryptographique et des claims, et un middleware Axum commun applique l’authentification avant les handlers. Les handlers ne font qu’imposer la politique de rôles.
 
-Le module `backend/src/auth/jwks.rs` gère uniquement le téléchargement, le cache et la recherche des clés publiques par `kid`. Il ne dépend pas d’Axum et ne décide pas des réponses HTTP. `backend/src/auth/mod.rs` conserve les règles de validation JWT, la vérification de l’usage des clés, le middleware et la traduction des erreurs JWKS en erreurs API. L’interface publique `auth::{AuthConfig, Authenticator}` reste inchangée.
+Le module `catalog-services/backend/src/auth/jwks.rs` gère uniquement le téléchargement, le cache et la recherche des clés publiques par `kid`. Il ne dépend pas d’Axum et ne décide pas des réponses HTTP. `catalog-services/backend/src/auth/mod.rs` conserve les règles de validation JWT, la vérification de l’usage des clés, le middleware et la traduction des erreurs JWKS en erreurs API. L’interface publique `auth::{AuthConfig, Authenticator}` reste inchangée.
 
 Pour un appel protégé :
 
@@ -191,9 +192,9 @@ Le navigateur appelle l’API sur la même origine que la SPA. Nginx relaie `/ap
 
 Les boutons Vue utilisent les **Application Initiated Actions** : `keycloak.login({ action: 'UPDATE_PASSWORD' })` ou `CONFIGURE_TOTP`. La bibliothèque construit le parcours OIDC, Keycloak exécute l’action et la SPA traite le retour standard. Annuler une action n’est pas une réussite, mais n’exige pas d’écran IAM applicatif supplémentaire : l’utilisateur retrouve simplement son espace.
 
-La navigation sécurisée affiche le catalogue à gauche et un menu de compte ☰ à droite, avec **Paramètres** et **Déconnexion**, sur ordinateur comme sur mobile. `/settings` regroupe les liens vers les fonctions natives de sécurité pour les deux rôles ; le lien vers la console d’administration n’apparaît que pour `admin`. La page et la navigation sont bleues pour `users`, mauves pour `admin`. Le retour des actions natives conserve la destination `/settings`. Les anciennes pages `/user` et `/admin` ne sont plus des écrans distincts : elles redirigent vers les paramètres, en conservant le contrôle `admin` sur l’ancienne URL `/admin`.
+Les deux applications partagent la même présentation d’en-tête : logo propre à l’application, nom et sous-titre à gauche, burger à droite et ligne orange Ni². Dans Catalog Services, le menu contient **Catalogue de services**, **Mes sélections**, **Paramètres** et **Déconnexion**, sur ordinateur comme sur mobile. Le header est neutre ; les fonds pâles, titres, badges et boutons métier restent bleus pour `users`, prune pour `admin`, sans bordure épaisse répétée en haut du bandeau. `/settings` regroupe les liens vers les fonctions natives de sécurité pour les deux rôles ; le lien vers la console d’administration n’apparaît que pour `admin`. Le retour des actions natives conserve la destination `/settings`. Les anciennes pages `/user` et `/admin` ne sont plus des écrans distincts : elles redirigent vers les paramètres, en conservant le contrôle `admin` sur l’ancienne URL `/admin`.
 
-Le thème Login `ni2`, monté en lecture seule depuis `keycloak/themes/ni2`, hérite de `keycloak.v2` et applique uniquement des surcharges CSS Ni² (PatternFly 5). Aucun template ou script natif n’est remplacé : connexion, mots de passe et OTP conservent leur comportement. Le thème reste commun à tous les rôles. La distinction bleu utilisateur / prune administrateur est réservée à Vue. Les consoles Account et Administration ainsi que les e-mails gardent leurs thèmes natifs. Les caches de thèmes sont désactivés uniquement pour le développement local.
+Le thème Login `ni2`, monté en lecture seule depuis `infrastructure/keycloak/themes/ni2`, hérite de `keycloak.v2` et applique uniquement des surcharges CSS Ni² (PatternFly 5). Aucun template ou script natif n’est remplacé : connexion, mots de passe et OTP conservent leur comportement. Le thème reste commun à tous les rôles. La distinction bleu utilisateur / prune administrateur est réservée à Vue. Les consoles Account et Administration ainsi que les e-mails gardent leurs thèmes natifs. Les caches de thèmes sont désactivés uniquement pour le développement local.
 
 Les actions requises et flux d’authentification natifs sont ceux créés par Keycloak à l’import. Seul `UPDATE_PASSWORD` est imposé initialement aux deux comptes ; `CONFIGURE_TOTP` n’est imposé à personne.
 
@@ -235,7 +236,7 @@ storage/in_memory_store.rs          Adaptateur sortant : collection et verrou
 
 ### Rôles des fichiers
 
-| Fichier dans `backend/src/catalog/` | Responsabilité |
+| Fichier dans `catalog-services/backend/src/catalog/` | Responsabilité |
 | --- | --- |
 | `domain.rs` | Types `DatacenterService`, `ServiceDraft` et cinq catégories ; aucune dépendance à Axum, Serde, JWT ou Keycloak |
 | `catalog_service.rs` | Lister, consulter, créer, modifier, supprimer et remplacer ; dépend uniquement du domaine et du port |
@@ -243,9 +244,9 @@ storage/in_memory_store.rs          Adaptateur sortant : collection et verrou
 | `catalog_http.rs` | Routes Axum, DTO JSON, contrôles de rôles et conversion des erreurs métier en HTTP |
 | `demo_catalog.rs` | Adaptateur de lecture du JSON prédéfini embarqué via `include_str!` |
 
-`backend/src/catalog.rs` déclare les modules. `main.rs` appelle `app(auth)`, qui
+`catalog-services/backend/src/catalog.rs` déclare les modules. `main.rs` appelle `app(auth)`, qui
 construit un `InMemoryStore` partagé par les services catalogue et sélections,
-puis appelle `app_with_services`. L’adaptateur dans `backend/src/storage/`
+puis appelle `app_with_services`. L’adaptateur dans `catalog-services/backend/src/storage/`
 implémente leurs deux ports avec des `BTreeMap`, compteurs et un même `Mutex`.
 Chaque construction de l’application commence avec un stockage neuf.
 
@@ -261,7 +262,7 @@ Les boutons Vue sont uniquement une aide visuelle, pas la protection réelle. Le
 
 Le repository est partagé par toutes les requêtes du processus. Ses opérations synchrones utilisent de courtes sections critiques sans `.await`. Le remplacement intégral prend un seul verrou : une lecture ne peut pas observer un catalogue à moitié chargé. Les identifiants restent croissants pendant la vie du processus, y compris lors d’un rechargement, pour éviter de réaffecter à un nouveau service l’identifiant encore détenu par un ancien écran.
 
-Le backend démarre vide. Seul `POST /api/catalog/seed`, avec un jeton portant `catalog-seed` obtenu par le client technique, charge les cinq services du fichier `backend/data/demo_catalog.json` et **remplace toutes les données courantes**. Le jeton d’un administrateur humain ne suffit plus. Le fichier est désérialisé avant le remplacement : une erreur de lecture ne détruit pas le catalogue courant. Il n’existe ni bouton de chargement, ni endpoint d’upload, ni URL externe configurable, ni nouvel accès à l’API d’administration Keycloak dans Rust.
+Le backend démarre vide. Seul `POST /api/catalog/seed`, avec un jeton portant `catalog-seed` obtenu par le client technique, charge les cinq services du fichier `catalog-services/backend/data/demo_catalog.json` et **remplace toutes les données courantes**. Le jeton d’un administrateur humain ne suffit plus. Le fichier est désérialisé avant le remplacement : une erreur de lecture ne détruit pas le catalogue courant. Il n’existe ni bouton de chargement, ni endpoint d’upload, ni URL externe configurable, ni nouvel accès à l’API d’administration Keycloak dans Rust.
 
 Le prix est un entier de centimes dans le domaine et l’API. Vue le convertit pour le formulaire et l’affiche en euros. La page `/catalog` est commune : consultation pour tous les comptes applicatifs, formulaire d’ajout/modification dans la page et suppression avec confirmation pour les administrateurs. Le catalogue se charge à l’ouverture et après chaque modification locale. Les autres sessions voient les changements en quittant puis en rouvrant le catalogue ; aucun bouton d’actualisation ni mécanisme temps réel n’est ajouté.
 
@@ -323,6 +324,15 @@ autre application et offline tokens sont traités séparément ci-dessous.
 
 ## 11. Cost Monitor : login applicatif et délégation catalogue distincts
 
+L’identité connectée des deux applications est présentée discrètement dans le
+header : pastille d’initiales et nom d’utilisateur sur ordinateur, pastille seule
+sur petit écran et nom complet consultable dans le burger. Le libellé accessible
+reste complet même quand le texte visuel est tronqué ou masqué. Les valeurs
+viennent des sessions authentifiées, sans requête IAM supplémentaire ni affichage
+du champ e-mail ou du sujet technique. Cost Monitor n’affiche plus de carte
+« Bonjour… » ; seules une carte de connexion catalogue si nécessaire et les
+données métier occupent son contenu principal.
+
 Cost Monitor est un serveur Axum distinct, avec des pages HTML rendues côté
 serveur et une session opaque dans le navigateur. Son premier client Keycloak,
 `cost-monitor-login`, authentifie uniquement l’utilisateur (`openid profile`,
@@ -331,7 +341,7 @@ session locale ne conserve que l’identité. Le tableau de bord est utilisable
 sans connexion catalogue.
 
 Le bouton **Connecter mon catalogue** lance un second parcours avec le client
-`cost-monitor`, consentement de lecture et `offline_access`. Cost Monitor ne lit
+`cost-monitor`, consentement de lecture, `email` et `offline_access`. Cost Monitor ne lit
 jamais le repository des sélections : il appelle leur API avec ce second access
 token. Les réponses restent filtrées par la règle métier de propriété.
 
@@ -343,6 +353,7 @@ Navigateur ── cookie de session opaque ──→ Cost Monitor :8082
 Cost Monitor ── deux codes/PKCE/secrets distincts ──┘
 Cost Monitor ── offline token catalogue → access token ──┘
 Cost Monitor ── access token utilisateur ──→ API Rust /api/selections
+Cost Monitor ── alertes métier SMTP ───────→ Mailpit:1025
 ```
 
 Le module OIDC s’appuie sur `openidconnect` pour le protocole et la validation
@@ -394,7 +405,32 @@ même en cas de jeton mal configuré portant une audience ou des scopes excessif
 Les clients/scopes absents ou inconnus
 échouent en mode fermé. Le scope `offline_access` ne donne aucune capacité.
 
-Une nouvelle base de données, Keycloak Authorization Services, la collecte
-périodique, les alertes et l’historique restent hors périmètre. Les limites de
+Le catalogue possède les services et sélections ; Cost Monitor possède les seuils
+et l’état de notification dans l’intégration du compte, pas dans la session.
+`alerts.rs` porte les règles et les montants exacts en centimes ; `catalog.rs`
+partage la passerelle de lecture entre pages et contrôleur, et `mail.rs` adapte
+le port `Mailer` à SMTP avec `lettre`. Le contrôleur de `web.rs` s’exécute toutes
+les 60 secondes, avec huit comptes maximum en parallèle et sans cycles superposés.
+Une notification est acquittée après succès SMTP et retentée en cas d’échec.
+Après un dépassement notifié, un retour au seuil ou en dessous réarme l’alerte
+et déclenche un e-mail unique de retour à la normale. Un retour non envoyé est
+retenté tant que le coût reste normal, mais annulé si un nouveau dépassement
+le rend obsolète. Aucun e-mail de retour n’est envoyé sans dépassement notifié.
+Un changement de seuil réinitialise cet état. Un instantané échoué ne
+change pas cet état. Le header de génération `x-catalog-instance` empêche la
+réutilisation de seuils après un redémarrage du backend ; les règles des
+sélections supprimées sont retirées à la prochaine lecture réussie.
+
+Le destinataire vient exclusivement des claims d’un ID token catalogue validé.
+Une adresse vérifiée est requise par défaut ; Compose contient une exception
+explicite pour les adresses AD fictives capturées par Mailpit. Les notifications
+métier ne passent jamais par l’administration Keycloak. Les cloches ouvrent des
+modales natives avec un petit script externe de même origine, sans JavaScript
+inline. Une déconnexion catalogue suspend les contrôles, mais conserve les seuils.
+Un redémarrage de Cost Monitor perd tout cet état mémoire ; aucune garantie
+durable de livraison exactement une fois n’est revendiquée.
+
+Une nouvelle base de données, Keycloak Authorization Services et l’historique
+restent hors périmètre. Les limites de
 sécurité locales et le scénario reproductible sont décrits dans
 [le guide Cost Monitor](cost-monitor.md).

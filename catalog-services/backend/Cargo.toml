@@ -1,0 +1,23 @@
+[package]
+name = "olaninc-api"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+axum = "0.8"
+headers = "0.4"
+jsonwebtoken = { version = "10", default-features = false, features = ["rust_crypto"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rand = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal", "sync"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+base64 = "0.22"
+http-body-util = "0.1"
+rsa = "0.9"
+tower = { version = "0.5", features = ["util"] }
