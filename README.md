@@ -160,6 +160,19 @@ Depuis la page de connexion native, cliquer sur **Mot de passe oublié**, saisir
 
 Si ce compte possède déjà un OTP, le flux de récupération natif de Keycloak peut aussi demander de configurer un nouvel authentificateur. Suivre ces étapes sur les pages Keycloak ; pour démontrer uniquement le mot de passe, réaliser ce scénario avant l’activation OTP.
 
+### Protection contre les tentatives répétées de connexion
+
+Keycloak bloque temporairement un compte après **5 mots de passe incorrects**,
+pour **une minute maximum**, sans verrouillage permanent. Le scénario se réalise
+entièrement dans le navigateur, avec `demo-user`, sans code Rust/Vue supplémentaire.
+Espacer les soumissions d’au moins deux secondes pour ne pas déclencher plus tôt
+la protection contre les tentatives trop rapprochées.
+
+Voir [le guide brute force](docs/brute-force.md) pour la configuration native,
+le refus du bon mot de passe pendant le blocage et la connexion après le délai.
+**Sur un realm existant**, appliquer les réglages dans la console Keycloak :
+le JSON d’import ne met pas à jour les données déjà conservées dans le volume.
+
 ### 9. Expiration et persistance
 
 - Le renouvellement des jetons d’accès se fait en mémoire via `keycloak-js`, avant les appels et à l’expiration du jeton.

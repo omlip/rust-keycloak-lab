@@ -22,7 +22,8 @@ conservent le texte complet. L’identité vient de la session OIDC authentifié
 sans affichage du champ e-mail ou du `sub` technique.
 Le logo et la favicon utilisent le même SVG dédié
 `cost-monitor/resources/logo.svg` : une baie de serveurs issue du symbole du
-catalogue, associée à un graphique de coûts, en bleu nuit et orange Ni².
+catalogue, associée à trois pièces empilées orange, dont la pièce supérieure
+inclinée porte un symbole €. La palette reste bleu nuit et orange Ni².
 
 ## Installation ou mise à niveau
 

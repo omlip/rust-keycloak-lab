@@ -200,6 +200,15 @@ Les actions requises et flux d’authentification natifs sont ceux créés par K
 
 Keycloak envoie son SMTP à `mailpit:1025`, sans authentification ni TLS dans le réseau Docker local. Aucune adresse SMTP externe n’est configurée et aucune option de relais n’est activée dans Mailpit. Les adresses fictives sont marquées vérifiées à l’initialisation pour éviter d’ajouter un parcours de vérification hors scope.
 
+### Protection native contre les essais de mots de passe répétés
+
+Le realm configure un blocage temporaire après cinq échecs de mot de passe,
+avec une attente plafonnée à 60 secondes et sans verrouillage permanent.
+Keycloak applique ce contrôle avant l’émission des jetons ; ni Vue ni Rust
+n’implémente de compteur de tentatives. Les jetons et sessions existants ne sont
+pas révoqués par ce mécanisme. Le parcours manuel, les valeurs exactes et les
+limites sont décrits dans [le guide brute force](brute-force.md).
+
 ## 8. Reproductibilité et limites assumées
 
 - Les versions des outils frontend sont fixées et `package-lock.json` est fourni ; Rust utilise `Cargo.lock` et les builds utilisent les modes verrouillés.

@@ -27,7 +27,7 @@ fn layout(body: &str, menu: &str) -> String {
 
 pub fn welcome() -> String {
     page(
-        r#"<section class="greeting"><h2>Bienvenue dans Cost Monitor</h2><p>Retrouve tes sélections de services et suis leur coût mensuel.</p><a class="button" href="/login">Se connecter à Cost Monitor</a></section>"#,
+        r#"<div class="welcome-main"><section class="hero" aria-labelledby="welcome-title"><div class="welcome-icon" aria-hidden="true"><img src="/logo.svg" width="64" height="64" alt=""></div><h2 id="welcome-title">Cost Monitor</h2><p class="lead">Connecte-toi avec Keycloak pour suivre le coût de tes sélections de services.</p><a class="button" href="/login">Se connecter <span aria-hidden="true">→</span></a><p class="hint">Tu seras redirigé vers la page de connexion.</p></section></div>"#,
     )
 }
 
@@ -227,6 +227,25 @@ fn action(path: &str, label: &str, csrf: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn welcome_matches_catalog_hero_and_preserves_the_login_route() {
+        let html = welcome();
+        for expected in [
+            "class=\"welcome-main\"",
+            "class=\"hero\" aria-labelledby=\"welcome-title\"",
+            "id=\"welcome-title\">Cost Monitor",
+            "class=\"welcome-icon\" aria-hidden=\"true\"",
+            "width=\"64\" height=\"64\"",
+            "class=\"lead\"",
+            "href=\"/login\">Se connecter",
+            "aria-hidden=\"true\">→",
+            "Tu seras redirigé vers la page de connexion.",
+        ] {
+            assert!(html.contains(expected), "Missing {expected}");
+        }
+        assert!(!html.contains("class=\"greeting\""));
+        assert!(!html.contains("Connecter mon catalogue"));
+    }
     #[test]
     fn html_is_escaped_and_money_uses_integer_cents() {
         assert_eq!(escape("<script>'\"&"), "&lt;script&gt;&#39;&quot;&amp;");
