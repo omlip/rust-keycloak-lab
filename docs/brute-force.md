@@ -48,7 +48,7 @@ Pas de reconstruction des applications nécessaire.
 
 ## Démonstration dans le navigateur
 
-1. Utiliser le compte local **demo-user**, pas un administrateur ni un compte
+1. Utiliser le compte local **demo-bruteforce**, pas un administrateur ni un compte
    Active Directory : l’annuaire peut avoir sa propre politique de verrouillage.
    Vérifier d’abord une connexion réussie avec son **mot de passe actuel**,
    terminer les éventuelles actions requises, puis se déconnecter. Cette réussite
@@ -56,7 +56,7 @@ Pas de reconstruction des applications nécessaire.
 2. Ouvrir <http://localhost:8080> dans une fenêtre privée et cliquer sur
    **Se connecter**. S’assurer que le formulaire Keycloak demande effectivement
    le mot de passe, sans réutilisation d’une session SSO.
-3. Saisir `demo-user` et un mot de passe incorrect. Répéter jusqu’à **cinq
+3. Saisir `demo-bruteforce` et un mot de passe incorrect. Répéter jusqu’à **cinq
    échecs**, en attendant **au moins deux secondes entre les soumissions**.
 4. Après le cinquième échec, attendre encore deux secondes, puis essayer le bon
    mot de passe : l’accès reste refusé pendant le blocage temporaire.

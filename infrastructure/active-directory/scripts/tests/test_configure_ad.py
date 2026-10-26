@@ -29,7 +29,12 @@ class CredentialsTests(unittest.TestCase):
         self.assertEqual(len(set(values.values())), len(values))
         self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
         self.assertEqual(self.path.parent.stat().st_mode & 0o777, 0o700)
-        self.assertTrue(all(len(value) >= 16 for value in values.values()))
+        self.assertTrue(all(len(value) >= 12 for value in values.values()))
+        for name in ad.USERS:
+            self.assertEqual(values[name], name + '-12345!')
+        for name in ('Administrator', 'svc-keycloak'):
+            self.assertNotEqual(values[name], name + '-12345!')
+            self.assertGreaterEqual(len(values[name]), 16)
 
     def test_replay_preserves_file_and_passwords_without_docker_lookup(self):
         with patch.object(ad, 'run', return_value=''):
@@ -62,6 +67,17 @@ class CredentialsTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'Invalid'):
             ad.credentials()
         self.assertEqual(self.path.read_bytes(), before)
+
+    def test_short_human_demo_passwords_do_not_weaken_technical_secret_validation(self):
+        self.path.parent.mkdir()
+        values = {name: name + '-12345!' if name in ad.USERS else 'Technical-secret-2026!'
+                  for name in ad.ACCOUNTS}
+        self.path.write_text(json.dumps(values))
+        self.assertEqual(ad.credentials(), values)
+        values['svc-keycloak'] = 'short-12345!'
+        self.path.write_text(json.dumps(values))
+        with self.assertRaisesRegex(RuntimeError, 'Invalid'):
+            ad.credentials()
 
 
 class FederationTests(unittest.TestCase):

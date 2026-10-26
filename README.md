@@ -59,24 +59,53 @@ un realm déjà présent ; aucun effacement de volume n’est nécessaire.
 
 | Service | URL navigateur |
 | --- | --- |
-| Application | http://localhost:8080 |
-| Keycloak | http://localhost:8081 |
-| Console de compte | http://localhost:8081/realms/olaninc/account/ |
-| Administration du realm | http://localhost:8081/admin/olaninc/console/ |
-| Mailpit | http://localhost:8025 |
+| Application | <http://localhost:8080> |
+| Keycloak | <http://localhost:8081> |
+| Console de compte | <http://localhost:8081/realms/olaninc/account/> |
+| Administration du realm | <http://localhost:8081/admin/olaninc/console/> |
+| Mailpit | <http://localhost:8025> |
 
 Utiliser **`localhost`**, pas `127.0.0.1`, dans le navigateur : issuer, origines et retours OIDC sont configurés pour ce nom. L’API n’a pas de port publié ; elle est accessible via `http://localhost:8080/api/...`. Le SMTP n’est accessible que dans le réseau Docker.
 
 ### Comptes de démonstration
 
-| Compte | Mot de passe initial **temporaire** | Rôles applicatifs | Permissions Keycloak |
+| Compte | Mot de passe de démonstration | Rôles applicatifs | Scénario principal |
 | --- | --- | --- | --- |
-| `demo-user` | `User-local-only-2026!` | `users` | Console de compte personnelle |
-| `demo-admin` | `Admin-local-only-2026!` | `admin` | Administration complète du realm `olaninc` |
+| `demo-user` | `demo-user-12345!` | `users` | Consultation du catalogue et sélections locales |
+| `demo-admin` | `demo-admin-12345!` | `admin` | Gestion du catalogue et administration Keycloak du realm |
+| `demo-security` | `demo-security-12345!` | `users` | Mot de passe oublié, changement imposé et OTP |
+| `demo-bruteforce` | `demo-bruteforce-12345!` | `users` | Blocage temporaire après échecs de connexion |
+| `user1` (AD) | `user1-12345!` | `users` | Fédération AD, Cost Monitor, alertes et délégation offline |
+| `user2` (AD) | `user2-12345!` | `users` | Isolation des sélections de deux propriétaires |
+| `user3` (AD) | `user3-12345!` | `users` | Refus d’une délégation catalogue avec une autre identité |
+| `user4` (AD) | `user4-12345!` | `users` | Compte de réserve / changements de groupe AD |
+| `admin1` (AD) | `admin1-12345!` | `admin` | Modification des tarifs, sans administration Keycloak ou AD |
 
-**À la première connexion, chacun doit choisir un nouveau mot de passe d’au moins 12 caractères sur l’écran natif Keycloak.** Le mot de passe initial ne fonctionne plus ensuite. Les adresses `user@olaninc.test` et `admin@olaninc.test` sont fictives ; les deux boîtes se consultent dans la même interface Mailpit.
+**Local uniquement : ces mots de passe sont publics, prévisibles et réservés à la
+démo.** Convention : `<identifiant>-12345!`. Aucun changement n’est imposé à
+la première connexion ; la politique de longueur minimale de 12 caractères reste
+active. Après un exercice de changement de mot de passe, utiliser sa nouvelle
+valeur. Les adresses fictives se consultent dans Mailpit.
 
-Le compte technique initial est distinct : `bootstrap-admin` / `Bootstrap-local-only-2026!`, dans le realm **master**, console http://localhost:8081/admin/master/console/. Ne pas l’utiliser dans la SPA. Ces identifiants sont uniquement destinés à cette installation locale et ne sont jamais transmis aux conteneurs Vue ou Rust.
+Pour mettre à niveau des comptes locaux existants, ou revenir explicitement aux
+mots de passe ci-dessus, sans supprimer les identités ni les OTP :
+
+```sh
+python3 infrastructure/keycloak/scripts/configure-demo-users.py --reset-passwords
+```
+
+Sans `--reset-passwords`, le script ajoute les comptes manquants et leurs rôles,
+mais conserve les mots de passe existants. Pour les comptes AD déjà provisionnés :
+
+```sh
+python3 infrastructure/active-directory/scripts/set-demo-passwords.py
+```
+
+Cette seconde opération nécessite Samba démarré. Elle conserve les secrets
+techniques et synchronise le fichier local avec le marqueur du volume AD.
+Voir [le guide des comptes et scénarios](docs/demo-users.md).
+
+Le compte technique initial est distinct : `bootstrap-admin` / `Bootstrap-local-only-2026!`, dans le realm **master**, console <http://localhost:8081/admin/master/console/>. Ne pas l’utiliser dans la SPA. Ces identifiants sont uniquement destinés à cette installation locale et ne sont jamais transmis aux conteneurs Vue ou Rust.
 
 ### Option : utilisateurs Active Directory via Samba
 
@@ -85,7 +114,7 @@ dans Docker (profil `ad`, sans ports publiés ni conteneur privilégié). Après
 démarrage normal, exécuter `python3 infrastructure/active-directory/scripts/configure-ad.py` : le script crée
 `user1` à `user4` avec le rôle `users` et `admin1` avec le rôle applicatif `admin`,
 via des groupes AD et une fédération LDAPS en lecture seule. Les comptes locaux
-restent conservés. Les mots de passe générés sont dans
+restent conservés. Les mots de passe de démonstration et les secrets techniques sont dans
 `.secrets/ad-credentials.json`, ignoré par Git. `admin1` n’a aucun droit
 d’administration Keycloak ou du domaine AD.
 
@@ -98,14 +127,14 @@ persistance et les vérifications `python3 infrastructure/active-directory/scrip
 ### 1. Utilisateur standard
 
 1. Ouvrir l’application et cliquer sur **Se connecter**.
-2. Se connecter avec `demo-user`, puis changer le mot de passe initial si demandé.
+2. Se connecter avec `demo-user` et son mot de passe de démonstration.
 3. La connexion depuis l’accueil mène directement au **Catalogue de services**. L’en-tête reprend celui de Cost Monitor : logo et nom de l’application à gauche, ligne orange et burger ☰ à droite. Ce menu contient **Catalogue de services**, **Mes sélections**, **Paramètres** et **Déconnexion**. Ouvrir **Paramètres** et vérifier le fond bleu pâle, le titre/badge `USER` bleus, le nom Camille Utilisateur et les actions de sécurité du compte. Aucun lien vers la console d’administration n’est affiché pour ce compte. Le header reste neutre ; le bandeau métier ne répète plus de bordure supérieure épaisse.
 4. Saisir `http://localhost:8080/admin` : **Accès refusé**. Le compte reste connecté.
 5. Ouvrir le menu ☰ puis cliquer sur **Déconnexion** : retour à l’accueil public et fin de la session SSO courante.
 
 ### 2. Administrateur
 
-1. Se connecter avec `demo-admin` et effectuer le changement de mot de passe initial.
+1. Se connecter avec `demo-admin` et son mot de passe de démonstration.
 2. Après l’arrivée sur le **Catalogue de services**, ouvrir le menu ☰ puis **Paramètres**. Vérifier la page mauve, le badge `ADMIN`, le nom Alex Administrateur, les actions de sécurité personnelles et le lien supplémentaire vers la console Keycloak.
 3. Le catalogue et les paramètres sont accessibles même si le compte ne possède pas le rôle `users`.
 4. Depuis **Paramètres**, ouvrir la console Keycloak. Le realm accessible est `olaninc`, pas `master`.
@@ -129,13 +158,13 @@ Avec `demo-user` connecté, ouvrir les outils de développement du navigateur �
 
 ### 4. Changer son mot de passe
 
-Dans **☰ → Paramètres**, **Changer mon mot de passe** ouvre une action native Keycloak. Selon l’ancienneté de l’authentification, Keycloak peut demander de s’authentifier à nouveau. Choisir un nouveau mot de passe et vérifier le retour à la page Paramètres de la SPA. Se déconnecter et vérifier la connexion avec le nouveau mot de passe.
+Avec `demo-security`, dans **☰ → Paramètres**, **Changer mon mot de passe** ouvre une action native Keycloak. Selon l’ancienneté de l’authentification, Keycloak peut demander de s’authentifier à nouveau. Choisir un nouveau mot de passe et vérifier le retour à la page Paramètres de la SPA. Se déconnecter et vérifier la connexion avec le nouveau mot de passe.
 
 Le lien **Mon compte Keycloak** ouvre également la console de compte native complète. L’application ne lit ni ne stocke le mot de passe.
 
 ### 5. Configurer un OTP facultatif
 
-1. Dans **☰ → Paramètres**, cliquer sur **Configurer mon OTP**.
+1. Avec `demo-security`, dans **☰ → Paramètres**, cliquer sur **Configurer mon OTP**.
 2. Sur l’écran Keycloak, scanner le QR code avec une application d’authentification TOTP, saisir le code et un nom d’appareil si demandé.
 3. Vérifier le retour à la SPA.
 4. Attendre le code suivant dans l’application d’authentification, puis se déconnecter et se reconnecter : Keycloak demande désormais le code OTP de ce compte. Un code déjà utilisé peut être refusé pour éviter son rejeu.
@@ -145,9 +174,9 @@ L’OTP n’est pas imposé aux autres comptes. Une session SSO existante n’en
 
 ### 6. Réinitialiser par e-mail depuis l’administration
 
-1. Dans la console Keycloak de `demo-admin`, ouvrir **Users / Utilisateurs → demo-user → Credentials / Identifiants**.
+1. Dans la console Keycloak de `demo-admin`, ouvrir **Users / Utilisateurs → demo-security → Credentials / Identifiants**.
 2. Utiliser **Credential reset / Réinitialisation des identifiants**, choisir l’action **Update Password**, puis envoyer l’e-mail. Selon la version, l’opération peut figurer dans le menu des actions du compte.
-3. Ouvrir Mailpit, sélectionner le message adressé à `user@olaninc.test` et suivre le lien.
+3. Ouvrir Mailpit, sélectionner le message adressé à `security@olaninc.test` et suivre le lien.
 4. **Utiliser une fenêtre privée ou un profil navigateur distinct**, pour ne pas mélanger la session administrateur avec la session utilisateur.
 5. Choisir le nouveau mot de passe sur l’écran natif Keycloak et vérifier la connexion utilisateur.
 
@@ -155,11 +184,11 @@ Si Keycloak ne propose pas un retour à l’application pour un e-mail envoyé d
 
 ### 7. Définir un mot de passe temporaire
 
-Avec `demo-admin`, ouvrir **Users → demo-user → Credentials → Reset password**, saisir un mot de passe respectant la politique et conserver **Temporary** activé. Dans un autre profil navigateur, se connecter avec ce mot de passe : Keycloak impose son remplacement avant l’accès à la SPA.
+Avec `demo-admin`, ouvrir **Users → demo-security → Credentials → Reset password**, saisir un mot de passe respectant la politique et conserver **Temporary** activé. Dans un autre profil navigateur, se connecter avec ce mot de passe : Keycloak impose son remplacement avant l’accès à la SPA.
 
 ### 8. Mot de passe oublié
 
-Depuis la page de connexion native, cliquer sur **Mot de passe oublié**, saisir `demo-user` ou son adresse e-mail et consulter Mailpit. Suivre le lien dans le même profil navigateur que celui utilisé pour initier la demande, puis choisir le nouveau mot de passe. L’inscription libre reste désactivée.
+Depuis la page de connexion native, cliquer sur **Mot de passe oublié**, saisir `demo-security` ou son adresse e-mail et consulter Mailpit. Suivre le lien dans le même profil navigateur que celui utilisé pour initier la demande, puis choisir le nouveau mot de passe. L’inscription libre reste désactivée.
 
 Si ce compte possède déjà un OTP, le flux de récupération natif de Keycloak peut aussi demander de configurer un nouvel authentificateur. Suivre ces étapes sur les pages Keycloak ; pour démontrer uniquement le mot de passe, réaliser ce scénario avant l’activation OTP.
 
@@ -167,7 +196,7 @@ Si ce compte possède déjà un OTP, le flux de récupération natif de Keycloak
 
 Keycloak bloque temporairement un compte après **5 mots de passe incorrects**,
 pour **une minute maximum**, sans verrouillage permanent. Le scénario se réalise
-entièrement dans le navigateur, avec `demo-user`, sans code Rust/Vue supplémentaire.
+entièrement dans le navigateur, avec `demo-bruteforce`, sans code Rust/Vue supplémentaire.
 Espacer les soumissions d’au moins deux secondes pour ne pas déclencher plus tôt
 la protection contre les tentatives trop rapprochées.
 
@@ -433,7 +462,7 @@ docker compose up -d --wait
 Si les options sont utilisées, ajouter `--profile ad --profile cost-monitor`
 aux commandes d’arrêt et de démarrage pour inclure aussi ces services.
 
-**Attention : les commandes suivantes suppriment les données Keycloak et Mailpit de ce projet.** Les mots de passe initiaux temporaires seront rétablis au prochain import.
+**Attention : les commandes suivantes suppriment les données Keycloak et Mailpit de ce projet.** Les mots de passe de démonstration seront rétablis au prochain import.
 
 ```sh
 docker compose down --volumes
@@ -456,7 +485,7 @@ Sans arrêter un autre projet, choisir des ports libres **avant le premier impor
 FRONTEND_HTTP_PORT=8083 MAILPIT_HTTP_PORT=8026 docker compose up --build -d --wait
 ```
 
-La SPA est alors sur http://localhost:8083 et Mailpit sur http://localhost:8026.
+La SPA est alors sur <http://localhost:8083> et Mailpit sur <http://localhost:8026>.
 Keycloak reste sur `8081` et `8082` est réservé à Cost Monitor. Réutiliser les
 mêmes variables pour les prochains démarrages, ou les conserver dans un fichier
 `.env` local ignoré :

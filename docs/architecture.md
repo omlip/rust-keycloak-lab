@@ -196,7 +196,7 @@ Les deux applications partagent la même présentation d’en-tête : logo propr
 
 Le thème Login `ni2`, monté en lecture seule depuis `infrastructure/keycloak/themes/ni2`, hérite de `keycloak.v2` et applique uniquement des surcharges CSS Ni² (PatternFly 5). Aucun template ou script natif n’est remplacé : connexion, mots de passe et OTP conservent leur comportement. Le thème reste commun à tous les rôles. La distinction bleu utilisateur / prune administrateur est réservée à Vue. Les consoles Account et Administration ainsi que les e-mails gardent leurs thèmes natifs. Les caches de thèmes sont désactivés uniquement pour le développement local.
 
-Les actions requises et flux d’authentification natifs sont ceux créés par Keycloak à l’import. Seul `UPDATE_PASSWORD` est imposé initialement aux deux comptes ; `CONFIGURE_TOTP` n’est imposé à personne.
+Les actions requises et flux d’authentification natifs sont ceux créés par Keycloak à l’import. Les quatre comptes locaux de démonstration n’ont ni changement de mot de passe initial imposé, ni OTP obligatoire. `demo-security` est réservé aux exercices de changement/récupération de mot de passe et d’OTP ; `demo-bruteforce` aux essais de blocage temporaire. Les mots de passe humains suivent une convention publique réservée à localhost, contrairement aux secrets techniques qui restent protégés et, pour AD, aléatoires.
 
 Keycloak envoie son SMTP à `mailpit:1025`, sans authentification ni TLS dans le réseau Docker local. Aucune adresse SMTP externe n’est configurée et aucune option de relais n’est activée dans Mailpit. Les adresses fictives sont marquées vérifiées à l’initialisation pour éviter d’ajouter un parcours de vérification hors scope.
 

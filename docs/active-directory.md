@@ -38,11 +38,29 @@ fichier original : aucun renouvellement automatique des mots de passe n’est fa
 | `user4` | `catalog-users` | `users` |
 | `admin1` | `catalog-admins` | `admin` |
 
-Les mots de passe distincts sont générés dans **`.secrets/ad-credentials.json`**,
-fichier ignoré par Git, permissions `0600` dans un dossier `0700`. Le consulter
-localement dans son éditeur pour saisir le mot de passe dans le navigateur ;
-ne pas le partager, le copier dans une collection REST ou l’ajouter au dépôt.
-Ces mots de passe n’expirent pas automatiquement pour cet exercice local.
+Les mots de passe humains suivent la convention publique
+**`<identifiant>-12345!`**, par exemple `user1-12345!`.
+Ils sont prévisibles et **réservés à la démo localhost**. Ils n’expirent pas
+automatiquement. Les secrets de `Administrator` et `svc-keycloak` restent
+aléatoires et ne suivent pas cette convention.
+
+Toutes ces valeurs sont conservées dans **`.secrets/ad-credentials.json`**,
+fichier ignoré par Git, permissions `0600` dans un dossier `0700`.
+Ne jamais partager ou versionner ce fichier : il contient aussi les secrets
+techniques, qui ne sont pas des identifiants publics de démonstration.
+
+Sur une installation existante, la configuration ordinaire conserve les anciens
+mots de passe. Pour adopter explicitement la convention, avec Samba démarré :
+
+```sh
+python3 infrastructure/active-directory/scripts/set-demo-passwords.py
+```
+
+Ce script modifie uniquement les cinq mots de passe humains, sans recréer les
+comptes, modifier leurs groupes ou renouveler les secrets techniques. Il met
+également à jour le marqueur de cohérence du volume et le fichier monté, en
+conservant son inode. Ne pas modifier ce fichier manuellement : le prochain
+démarrage refuserait un désaccord avec le marqueur.
 
 Deux comptes techniques supplémentaires existent dans l’annuaire :
 
@@ -56,8 +74,9 @@ L’interface actuelle affiche un lien d’administration Keycloak pour le rôle
 applicatif `admin` ; ce lien n’accorde aucun droit : `admin1` n’a pas accès à
 l’administration du realm. `demo-admin` conserve son accès administratif distinct.
 
-Les comptes locaux `demo-user` et `demo-admin` restent disponibles, avec leurs
-mots de passe et OTP actuels.
+Les comptes locaux `demo-user`, `demo-admin`, `demo-security` et
+`demo-bruteforce` restent indépendants de l’annuaire ; la configuration AD
+ordinaire ne change ni leurs mots de passe, ni leurs OTP.
 
 ## Paramètres de fédération
 

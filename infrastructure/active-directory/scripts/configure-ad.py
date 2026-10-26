@@ -46,14 +46,17 @@ def credentials():
         if any(name.endswith('_samba-data') for name in volumes):
             raise RuntimeError('Samba volume exists but credentials are missing. '
                                'Restore .secrets/ad-credentials.json; no passwords were reset.')
-        values = {name: 'Demo-' + secrets.token_urlsafe(20) + '-Aa9!' for name in ACCOUNTS}
+        # Human passwords are public localhost demo values; technical secrets stay random.
+        values = {name: name + '-12345!' if name in USERS
+                  else 'Demo-' + secrets.token_urlsafe(20) + '-Aa9!' for name in ACCOUNTS}
         fd = os.open(SECRET_FILE, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, 'w') as stream:
             json.dump(values, stream, indent=2)
             stream.write('\n')
     SECRET_FILE.chmod(0o600)
     values = json.loads(SECRET_FILE.read_text())
-    if set(values) != set(ACCOUNTS) or any(not isinstance(v, str) or len(v) < 16 for v in values.values()):
+    if set(values) != set(ACCOUNTS) or any(not isinstance(v, str) or len(v) < (12 if name in USERS else 16)
+                                            for name, v in values.items()):
         raise RuntimeError('Invalid AD credentials file; refusing to replace it.')
     return values
 

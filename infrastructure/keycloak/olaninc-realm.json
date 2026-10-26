@@ -243,9 +243,9 @@
       "firstName": "Camille",
       "lastName": "Utilisateur",
       "realmRoles": ["default-roles-olaninc", "users"],
-      "requiredActions": ["UPDATE_PASSWORD"],
+      "requiredActions": [],
       "credentials": [
-        { "type": "password", "value": "User-local-only-2026!", "temporary": true }
+        { "type": "password", "value": "demo-user-12345!", "temporary": false }
       ]
     },
     {
@@ -257,9 +257,35 @@
       "lastName": "Administrateur",
       "realmRoles": ["default-roles-olaninc", "admin"],
       "clientRoles": { "realm-management": ["realm-admin"] },
-      "requiredActions": ["UPDATE_PASSWORD"],
+      "requiredActions": [],
       "credentials": [
-        { "type": "password", "value": "Admin-local-only-2026!", "temporary": true }
+        { "type": "password", "value": "demo-admin-12345!", "temporary": false }
+      ]
+    },
+    {
+      "username": "demo-security",
+      "enabled": true,
+      "email": "security@olaninc.test",
+      "emailVerified": true,
+      "firstName": "Sam",
+      "lastName": "Sécurité",
+      "realmRoles": ["default-roles-olaninc", "users"],
+      "requiredActions": [],
+      "credentials": [
+        { "type": "password", "value": "demo-security-12345!", "temporary": false }
+      ]
+    },
+    {
+      "username": "demo-bruteforce",
+      "enabled": true,
+      "email": "bruteforce@olaninc.test",
+      "emailVerified": true,
+      "firstName": "Robin",
+      "lastName": "Protection",
+      "realmRoles": ["default-roles-olaninc", "users"],
+      "requiredActions": [],
+      "credentials": [
+        { "type": "password", "value": "demo-bruteforce-12345!", "temporary": false }
       ]
     }
   ]
