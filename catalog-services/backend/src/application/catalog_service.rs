@@ -1,8 +1,10 @@
-use super::{
-    catalog_repository::CatalogRepository,
-    domain::{DatacenterService, ServiceDraft},
+use crate::{
+    application::{
+        access::{Actor, Permission},
+        ports::catalog_repository::CatalogRepository,
+    },
+    domain::catalog::{DatacenterService, ServiceDraft},
 };
-use crate::access::{Actor, Permission};
 use std::sync::Arc;
 
 #[derive(Clone)]

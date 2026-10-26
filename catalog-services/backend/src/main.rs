@@ -1,6 +1,6 @@
 use olaninc_api::{
     app,
-    auth::{AuthConfig, Authenticator},
+    infrastructure::auth::{AuthConfig, Authenticator},
 };
 use std::{env, error::Error};
 use tracing_subscriber::EnvFilter;

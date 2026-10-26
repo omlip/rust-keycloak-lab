@@ -1,6 +1,5 @@
-mod jwks;
-
-use crate::access::{Actor, Permission};
+use super::jwks::{JwksClient, JwksError};
+use crate::application::access::{Actor, Permission};
 use axum::{
     Json,
     extract::{Request, State},
@@ -10,7 +9,6 @@ use axum::{
 };
 use headers::{Authorization, HeaderMapExt, authorization::Bearer};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, decode_header};
-use jwks::{JwksClient, JwksError};
 use serde::Deserialize;
 use std::{error::Error, sync::Arc};
 
@@ -70,7 +68,11 @@ impl Claims {
                     CatalogSeed => has("catalog-seed"),
                     _ => has("users") || has("admin"),
                 };
-                role_allowed && self.scope.split_whitespace().any(|s| s == p.scope())
+                role_allowed
+                    && self
+                        .scope
+                        .split_whitespace()
+                        .any(|s| s == permission_scope(*p))
             })
             .collect();
         Actor::new(self.sub.clone(), &permissions)
@@ -84,6 +86,17 @@ impl Claims {
         } else {
             Err(ApiError::Forbidden)
         }
+    }
+}
+
+// OAuth vocabulary belongs to the authentication adapter, not application permissions.
+fn permission_scope(permission: Permission) -> &'static str {
+    match permission {
+        Permission::CatalogRead => "catalog:read",
+        Permission::CatalogWrite => "catalog:write",
+        Permission::CatalogSeed => "catalog:seed",
+        Permission::SelectionsRead => "selections:read",
+        Permission::SelectionsWrite => "selections:write",
     }
 }
 

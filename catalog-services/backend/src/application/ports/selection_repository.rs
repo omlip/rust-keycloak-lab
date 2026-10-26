@@ -1,5 +1,4 @@
-use super::domain::Selection;
-use crate::catalog::domain::DatacenterService;
+use crate::domain::{catalog::DatacenterService, selection::Selection};
 
 // A coherent read, independent of HTTP/JWT and of a specific storage engine.
 #[derive(Clone)]

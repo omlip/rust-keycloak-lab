@@ -140,7 +140,7 @@ L’utilisateur administrateur ne reçoit pas forcément `users` : le backend au
 
 `headers` lit le schéma Bearer, `jsonwebtoken` effectue la validation cryptographique et des claims, et un middleware Axum commun applique l’authentification avant les handlers. Les handlers ne font qu’imposer la politique de rôles.
 
-Le module `catalog-services/backend/src/auth/jwks.rs` gère uniquement le téléchargement, le cache et la recherche des clés publiques par `kid`. Il ne dépend pas d’Axum et ne décide pas des réponses HTTP. `catalog-services/backend/src/auth/mod.rs` conserve les règles de validation JWT, la vérification de l’usage des clés, le middleware et la traduction des erreurs JWKS en erreurs API. L’interface publique `auth::{AuthConfig, Authenticator}` reste inchangée.
+Le module `catalog-services/backend/src/infrastructure/auth/jwks.rs` gère uniquement le téléchargement, le cache et la recherche des clés publiques par `kid`. Il ne dépend pas d’Axum et ne décide pas des réponses HTTP. `catalog-services/backend/src/infrastructure/auth/jwt.rs` conserve les règles de validation JWT, la vérification de l’usage des clés, le middleware et la traduction des erreurs JWKS en erreurs API. L’interface `infrastructure::auth::{AuthConfig, Authenticator}` est réexportée par le module d’authentification.
 
 Pour un appel protégé :
 
@@ -230,34 +230,85 @@ Le catalogue constitue une ressource métier fictive, volontairement distincte d
 Vue / curl / Postman
        │ HTTP + Bearer
        ▼
-auth::authenticate                  Validation JWT existante
+infrastructure::auth::authenticate  Validation JWT et traduction en Actor
        ▼
-catalog_http.rs                     Adaptateur entrant : JSON, rôles, HTTP
+infrastructure/http/catalog_http.rs Adaptateur entrant : JSON, rôles, HTTP
        ▼
-catalog_service.rs                  Cas d’usage, types du domaine
+application/catalog_service.rs      Cas d’usage utilisant domain/catalog.rs
        │
        ▼
-CatalogRepository                  Port sortant défini côté cœur
+application/ports/CatalogRepository Port sortant défini côté cœur
        ▲
        │ implémenté par
-storage/in_memory_store.rs          Adaptateur sortant : collection et verrou
+infrastructure/persistence/          Adaptateur sortant : InMemoryStore
 ```
+
+### Trois couches explicites
+
+Le backend est organisé par couche, et non plus par dossiers métier mélangeant
+le domaine, les cas d’usage et les adaptateurs :
+
+```text
+catalog-services/backend/src/
+├── domain/
+│   ├── catalog.rs
+│   └── selection.rs
+├── application/
+│   ├── access.rs
+│   ├── catalog_service.rs
+│   ├── selection_service.rs
+│   └── ports/
+│       ├── catalog_repository.rs
+│       └── selection_repository.rs
+├── infrastructure/
+│   ├── auth/          jwt.rs, jwks.rs
+│   ├── http/          catalog_http.rs, selection_http.rs
+│   ├── persistence/   in_memory_store.rs
+│   └── seed/          demo_catalog.rs
+├── lib.rs
+└── main.rs
+```
+
+Les fichiers `mod.rs` déclarent les sous-modules de chaque couche. Le domaine
+ne dépend que de la bibliothèque standard. L’application dépend du domaine et
+de ses propres ports ; elle ne connaît ni Axum, ni Serde, ni JWT, ni le stockage
+concret. L’infrastructure dépend de l’application et du domaine, jamais l’inverse.
+Ces frontières sont organisées en modules dans un même crate, pas en crates
+indépendants ; le compilateur n’interdit donc pas à lui seul de futurs imports
+contraires à cette règle. Cette organisation concerne le backend de Catalog
+Services, pas le frontend Vue ni Cost Monitor.
 
 ### Rôles des fichiers
 
-| Fichier dans `catalog-services/backend/src/catalog/` | Responsabilité |
+| Fichier relatif à `catalog-services/backend/src/` | Responsabilité |
 | --- | --- |
-| `domain.rs` | Types `DatacenterService`, `ServiceDraft` et cinq catégories ; aucune dépendance à Axum, Serde, JWT ou Keycloak |
-| `catalog_service.rs` | Lister, consulter, créer, modifier, supprimer et remplacer ; dépend uniquement du domaine et du port |
-| `catalog_repository.rs` | Trait `CatalogRepository`, contrat de stockage synchrone `Send + Sync` |
-| `catalog_http.rs` | Routes Axum, DTO JSON, contrôles de rôles et conversion des erreurs métier en HTTP |
-| `demo_catalog.rs` | Adaptateur de lecture du JSON prédéfini embarqué via `include_str!` |
+| `domain/catalog.rs` | Types `DatacenterService`, `ServiceDraft` et cinq catégories ; aucune dépendance à Axum, Serde, JWT ou Keycloak |
+| `domain/selection.rs` | Sélection, propriétaire immuable, contrôle de propriété, nom et appartenance sans doublons |
+| `application/access.rs` | `Actor` et permissions applicatives ; aucun nom de scope OAuth |
+| `application/catalog_service.rs` | Lister, consulter, créer, modifier, supprimer et remplacer le catalogue |
+| `application/selection_service.rs` | Cas d’usage personnels, capacités, contrôle de propriété, totaux et nouvelles tentatives après conflit |
+| `application/ports/catalog_repository.rs` | Trait `CatalogRepository`, contrat de stockage synchrone `Send + Sync` |
+| `application/ports/selection_repository.rs` | Trait `SelectionRepository`, instantanés cohérents et sauvegarde conditionnée par les versions |
+| `infrastructure/http/` | Routes Axum, DTO JSON, contrôles de rôles et conversion des erreurs métier en HTTP |
+| `infrastructure/auth/` | Validation JWT/JWKS et traduction rôles/scopes/client en permissions applicatives |
+| `infrastructure/persistence/in_memory_store.rs` | Implémentation mémoire des deux ports de stockage |
+| `infrastructure/seed/demo_catalog.rs` | Adaptateur de lecture du JSON prédéfini embarqué via `include_str!` |
 
-`catalog-services/backend/src/catalog.rs` déclare les modules. `main.rs` appelle `app(auth)`, qui
-construit un `InMemoryStore` partagé par les services catalogue et sélections,
-puis appelle `app_with_services`. L’adaptateur dans `catalog-services/backend/src/storage/`
-implémente leurs deux ports avec des `BTreeMap`, compteurs et un même `Mutex`.
-Chaque construction de l’application commence avec un stockage neuf.
+### Assemblage : `lib.rs` et démarrage : `main.rs`
+
+`lib.rs` déclare `domain`, `application` et `infrastructure`. C’est le point de
+composition : `app(auth)` choisit et construit un `InMemoryStore`, l’injecte
+dans `CatalogService` et `SelectionService`, puis appelle `app_with_services`
+pour assembler les routes et le middleware. Les services ne choisissent pas
+leur stockage ; ils reçoivent une implémentation de leurs ports.
+
+`main.rs` lit l’environnement, initialise les logs et l’authentification,
+charge les clés publiques, ouvre le port et lance Axum avec arrêt gracieux.
+Il ne contient aucune règle métier. Les tests peuvent importer la bibliothèque
+et construire le routeur sans démarrer ce point d’entrée ni le port de production.
+
+L’adaptateur mémoire implémente les deux ports avec des `BTreeMap`, compteurs et
+un même `Mutex`. Chaque construction de l’application commence avec un stockage neuf.
 
 Le repository **implémente** le port dont dépend le service applicatif. Remplacer la mémoire par un autre stockage ne doit pas imposer de changement au domaine ni aux handlers. Il n’y a pas de trait par cas d’usage : les méthodes du service constituent son interface d’entrée.
 
@@ -405,7 +456,7 @@ Le login utilise `prompt=login` (choix d’un autre compte via les formulaires
 natifs), tandis que la connexion catalogue utilise `prompt=consent` et peut
 réutiliser le SSO. Aucun backchannel logout applicatif n’est ajouté ici.
 
-Les capacités du cœur ne sont pas des rôles Keycloak : `access::Actor` est
+Les capacités du cœur ne sont pas des rôles Keycloak : `application::access::Actor` est
 construit à la frontière depuis des claims signés, avec intersection des scopes,
 rôles et permissions maximales du client `azp`. `cost-monitor` est plafonné à
 `SelectionsRead`, `catalog-loader` à `CatalogSeed` et la SPA aux opérations

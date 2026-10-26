@@ -1,15 +1,17 @@
-use olaninc_api::access::{Actor, Permission};
 use olaninc_api::{
-    catalog::{
-        catalog_repository::CatalogRepository,
-        domain::{Category, ServiceDraft},
-    },
-    selections::{
-        domain::{OwnerId, Selection, SelectionError},
-        selection_repository::{SelectionRepository, SelectionSnapshot, WriteError},
+    application::{
+        access::{Actor, Permission},
+        ports::{
+            catalog_repository::CatalogRepository,
+            selection_repository::{SelectionRepository, SelectionSnapshot, WriteError},
+        },
         selection_service::SelectionService,
     },
-    storage::in_memory_store::InMemoryStore,
+    domain::{
+        catalog::{Category, ServiceDraft},
+        selection::{OwnerId, Selection, SelectionError},
+    },
+    infrastructure::persistence::in_memory_store::InMemoryStore,
 };
 use std::sync::{Arc, Barrier};
 

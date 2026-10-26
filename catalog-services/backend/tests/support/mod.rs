@@ -8,7 +8,7 @@ use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use olaninc_api::{
     app,
-    auth::{AuthConfig, Authenticator},
+    infrastructure::auth::{AuthConfig, Authenticator},
 };
 use rand::{SeedableRng, rngs::StdRng};
 use rsa::{RsaPrivateKey, pkcs1::EncodeRsaPrivateKey, traits::PublicKeyParts};

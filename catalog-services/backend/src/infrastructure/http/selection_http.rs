@@ -1,11 +1,11 @@
-use super::{
-    domain::SelectionError,
-    selection_service::{SelectionDetails, SelectionService},
-};
+use super::catalog_http::ServiceOutput;
 use crate::{
-    access::Actor,
-    auth::{ApiError, Claims},
-    catalog::catalog_http::ServiceOutput,
+    application::{
+        access::Actor,
+        selection_service::{SelectionDetails, SelectionService},
+    },
+    domain::selection::SelectionError,
+    infrastructure::auth::{ApiError, Claims},
 };
 use axum::{
     Extension, Json, Router,

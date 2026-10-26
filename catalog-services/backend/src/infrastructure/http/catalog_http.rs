@@ -1,9 +1,11 @@
-use super::{
-    catalog_service::{CatalogError, CatalogService},
-    demo_catalog,
-    domain::{Category, DatacenterService, ServiceDraft},
+use crate::{
+    application::catalog_service::{CatalogError, CatalogService},
+    domain::catalog::{Category, DatacenterService, ServiceDraft},
+    infrastructure::{
+        auth::{ApiError, Claims},
+        seed::demo_catalog,
+    },
 };
-use crate::auth::{ApiError, Claims};
 use axum::{
     Extension, Json, Router,
     extract::{Path, State, rejection::JsonRejection},

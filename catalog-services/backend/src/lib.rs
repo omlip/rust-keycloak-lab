@@ -1,22 +1,23 @@
-pub mod access;
-pub mod auth;
-pub mod catalog;
-pub mod selections;
-pub mod storage;
+pub mod application;
+pub mod domain;
+pub mod infrastructure;
 
-use auth::{Authenticator, authenticate};
+use application::{catalog_service::CatalogService, selection_service::SelectionService};
 use axum::{Json, Router, middleware, routing::get};
-use catalog::{catalog_http, catalog_service::CatalogService};
-use selections::{selection_http, selection_service::SelectionService};
+use infrastructure::{
+    auth::{Authenticator, authenticate},
+    http::{catalog_http, selection_http},
+    persistence::in_memory_store::InMemoryStore,
+};
 use serde::Serialize;
 use std::sync::Arc;
-use storage::in_memory_store::InMemoryStore;
 
 #[derive(Serialize)]
 struct Message {
     message: &'static str,
 }
 
+/// Composition root: choose the concrete adapters and inject them into use cases.
 pub fn app(auth: Authenticator) -> Router {
     let store = Arc::new(InMemoryStore::default());
     let catalog = CatalogService::new(store.clone());

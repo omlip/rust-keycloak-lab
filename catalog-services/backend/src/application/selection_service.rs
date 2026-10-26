@@ -1,10 +1,12 @@
-use super::{
-    domain::{Selection, SelectionError},
-    selection_repository::{SelectionRepository, SelectionSnapshot},
-};
 use crate::{
-    access::{Actor, Permission},
-    catalog::domain::DatacenterService,
+    application::{
+        access::{Actor, Permission},
+        ports::selection_repository::{SelectionRepository, SelectionSnapshot},
+    },
+    domain::{
+        catalog::DatacenterService,
+        selection::{Selection, SelectionError},
+    },
 };
 use std::sync::Arc;
 

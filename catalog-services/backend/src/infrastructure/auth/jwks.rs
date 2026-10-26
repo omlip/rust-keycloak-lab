@@ -1,3 +1,4 @@
+//! Public-key retrieval and caching, separate from JWT and HTTP policy.
 use jsonwebtoken::jwk::{Jwk, JwkSet};
 use std::{
     error::Error,

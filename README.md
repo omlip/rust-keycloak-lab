@@ -7,6 +7,9 @@ Une SPA **Vue / TypeScript**, une API **Rust / Axum** et **Keycloak** pour démo
 ```text
 catalog-services/
   backend/          API Rust, catalogue et sélections personnelles
+    src/domain/     Types et règles métier
+    src/application/ Cas d’usage, acteurs et ports de stockage
+    src/infrastructure/ Adaptateurs HTTP/JWT, stockage mémoire et seed
   frontend/         Application Vue
 cost-monitor/       Application Rust de suivi des coûts
 infrastructure/
@@ -484,12 +487,15 @@ compose.yaml                  Services et réseau local
 infrastructure/keycloak/olaninc-realm.json Configuration initiale reproductible
 infrastructure/active-directory/        Image et initialisation de l’annuaire Samba
 catalog-services/frontend/              Vue, keycloak-js, proxy Nginx
-catalog-services/backend/src/auth/mod.rs Validation JWT, middleware et erreurs de sécurité
-catalog-services/backend/src/auth/jwks.rs Récupération et cache des clés publiques
-catalog-services/backend/src/lib.rs       Routes et politiques de rôles
-catalog-services/backend/src/catalog/     Cœur catalogue, port et adaptateur REST
-catalog-services/backend/src/selections/  Domaine, règle de propriété, cas d’usage et REST
-catalog-services/backend/src/storage/     Adaptateur mémoire partagé catalogue/sélections
+catalog-services/backend/src/domain/      Types et règles métier du catalogue et des sélections
+catalog-services/backend/src/application/ Cas d’usage et permissions applicatives
+catalog-services/backend/src/application/ports/ Contrats de stockage (repositories)
+catalog-services/backend/src/infrastructure/auth/ Validation JWT et récupération/cache JWKS
+catalog-services/backend/src/infrastructure/http/ Routes REST, DTO et traduction des erreurs
+catalog-services/backend/src/infrastructure/persistence/ Adaptateur mémoire partagé
+catalog-services/backend/src/infrastructure/seed/ Lecture du catalogue de démonstration embarqué
+catalog-services/backend/src/lib.rs       Assemblage et injection des adaptateurs
+catalog-services/backend/src/main.rs      Configuration, lancement HTTP et arrêt du serveur
 catalog-services/backend/data/demo_catalog.json Catalogue fictif chargé uniquement par POST /seed
 infrastructure/keycloak/scripts/         Configuration des clients Keycloak
 infrastructure/active-directory/scripts/ Configuration et vérification de la fédération AD

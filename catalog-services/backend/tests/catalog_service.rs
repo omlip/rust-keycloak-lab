@@ -1,9 +1,11 @@
-use olaninc_api::access::{Actor, Permission};
-use olaninc_api::catalog::{
-    catalog_service::{CatalogError, CatalogService},
-    domain::{Category, ServiceDraft},
+use olaninc_api::infrastructure::persistence::in_memory_store::InMemoryStore;
+use olaninc_api::{
+    application::{
+        access::{Actor, Permission},
+        catalog_service::{CatalogError, CatalogService},
+    },
+    domain::catalog::{Category, ServiceDraft},
 };
-use olaninc_api::storage::in_memory_store::InMemoryStore;
 use std::sync::Arc;
 
 fn actor() -> Actor {

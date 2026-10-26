@@ -1,4 +1,4 @@
-use super::domain::{Category, ServiceDraft};
+use crate::domain::catalog::{Category, ServiceDraft};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -9,9 +9,9 @@ struct SeedEntry {
     monthly_price_cents: u64,
 }
 
-pub(super) fn load() -> Result<Vec<ServiceDraft>, String> {
+pub(crate) fn load() -> Result<Vec<ServiceDraft>, String> {
     let entries: Vec<SeedEntry> =
-        serde_json::from_str(include_str!("../../data/demo_catalog.json"))
+        serde_json::from_str(include_str!("../../../data/demo_catalog.json"))
             .map_err(|error| error.to_string())?;
     entries
         .into_iter()

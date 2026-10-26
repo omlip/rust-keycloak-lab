@@ -1,4 +1,4 @@
-use crate::selections::domain::OwnerId;
+use crate::domain::selection::OwnerId;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Permission {
@@ -7,18 +7,6 @@ pub enum Permission {
     CatalogSeed,
     SelectionsRead,
     SelectionsWrite,
-}
-
-impl Permission {
-    pub fn scope(self) -> &'static str {
-        match self {
-            Self::CatalogRead => "catalog:read",
-            Self::CatalogWrite => "catalog:write",
-            Self::CatalogSeed => "catalog:seed",
-            Self::SelectionsRead => "selections:read",
-            Self::SelectionsWrite => "selections:write",
-        }
-    }
 }
 
 #[derive(Clone, Debug)]

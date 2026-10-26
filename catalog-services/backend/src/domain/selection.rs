@@ -1,3 +1,4 @@
+//! Personal selection ownership, naming and duplicate-free membership.
 use std::collections::BTreeSet;
 
 #[derive(Clone, Debug, PartialEq, Eq)]

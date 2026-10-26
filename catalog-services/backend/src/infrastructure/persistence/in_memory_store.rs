@@ -1,10 +1,12 @@
-use crate::catalog::{
-    catalog_repository::CatalogRepository,
-    domain::{DatacenterService, ServiceDraft},
-};
-use crate::selections::{
-    domain::Selection,
-    selection_repository::{SelectionRepository, SelectionSnapshot, WriteError},
+use crate::{
+    application::ports::{
+        catalog_repository::CatalogRepository,
+        selection_repository::{SelectionRepository, SelectionSnapshot, WriteError},
+    },
+    domain::{
+        catalog::{DatacenterService, ServiceDraft},
+        selection::Selection,
+    },
 };
 use std::{collections::BTreeMap, sync::Mutex};
 

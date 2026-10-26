@@ -1,3 +1,4 @@
+//! Datacenter service types and supported categories.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Category {
     Compute,

@@ -1,4 +1,4 @@
-use super::domain::{DatacenterService, ServiceDraft};
+use crate::domain::catalog::{DatacenterService, ServiceDraft};
 
 // Outgoing port: no HTTP, JWT or storage implementation leaks into this contract.
 pub trait CatalogRepository: Send + Sync {
