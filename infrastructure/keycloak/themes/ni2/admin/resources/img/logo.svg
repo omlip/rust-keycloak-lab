@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 310 64" fill="none">
+  <rect x="6" y="8" width="22" height="48" rx="5" fill="#21255a"/>
+  <rect x="36" y="8" width="22" height="48" rx="5" fill="#21255a"/>
+  <path d="M13 19h8m22 0h8" stroke="#f47920" stroke-width="4" stroke-linecap="round"/>
+  <path d="M13 30h8m-8 10h8m22-10h8m-8 10h8" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="17" cy="49" r="2" fill="#f47920"/>
+  <circle cx="47" cy="49" r="2" fill="#f47920"/>
+  <text x="78" y="31" fill="#21255a" font-family="system-ui, sans-serif" font-size="28" font-weight="700">Ni²</text>
+  <text x="78" y="51" fill="#5c0e67" font-family="system-ui, sans-serif" font-size="15">Administration du realm</text>
+</svg>

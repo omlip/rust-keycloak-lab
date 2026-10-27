@@ -1,0 +1,69 @@
+/* Keycloak 26.8.1 Account Console: inherit all React/PatternFly 5 behavior.
+   Only branding and visual tokens are overridden; no templates or scripts. */
+:root {
+    --ni2-navy: #21255a;
+    --ni2-accent: #0054a6;
+    --ni2-accent-hover: #004383;
+    --ni2-soft: #e6eef6;
+    --ni2-orange: #f47920;
+    --ni2-background: #ebebec;
+    --ni2-border: #d2d2dc;
+    --pf-v5-global--primary-color--100: var(--ni2-accent);
+    --pf-v5-global--primary-color--200: var(--ni2-accent-hover);
+    --pf-v5-global--link--Color: var(--ni2-accent);
+    --pf-v5-global--link--Color--hover: var(--ni2-accent-hover);
+    --pf-v5-global--Color--100: var(--ni2-navy);
+    --pf-v5-global--Color--200: #505269;
+    --pf-v5-global--BackgroundColor--200: var(--ni2-background);
+    --pf-v5-global--FontFamily--text: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --pf-v5-global--FontFamily--heading: var(--pf-v5-global--FontFamily--text);
+}
+
+body[data-page-id="account"] { color: var(--ni2-navy); background: var(--ni2-background); }
+.pf-v5-c-page { --pf-v5-c-page--BackgroundColor: var(--ni2-background); }
+.pf-v5-c-masthead {
+    --pf-v5-c-masthead--BackgroundColor: #fff;
+    border-bottom: 4px solid var(--ni2-orange);
+}
+.pf-v5-c-masthead__brand img { height: 48px; width: auto; max-width: min(300px, 55vw); }
+.pf-v5-c-masthead .pf-v5-c-toolbar { background: transparent; }
+.pf-v5-c-masthead .pf-v5-c-button {
+    --pf-v5-c-button--m-plain--Color: var(--ni2-navy);
+    --pf-v5-c-button--m-plain--hover--Color: var(--ni2-accent);
+}
+.pf-v5-c-masthead .pf-v5-c-menu-toggle {
+    --pf-v5-c-menu-toggle--Color: var(--ni2-navy);
+    --pf-v5-c-menu-toggle--m-plain--Color: var(--ni2-navy);
+}
+.pf-v5-c-page__sidebar { --pf-v5-c-page__sidebar--BackgroundColor: #fff; border-right: 1px solid var(--ni2-border); }
+.pf-v5-c-nav {
+    --pf-v5-c-nav__link--Color: var(--ni2-navy);
+    --pf-v5-c-nav__link--hover--Color: var(--ni2-accent);
+    --pf-v5-c-nav__link--hover--BackgroundColor: var(--ni2-soft);
+    --pf-v5-c-nav__link--m-current--Color: var(--ni2-accent);
+    --pf-v5-c-nav__link--m-current--BackgroundColor: var(--ni2-soft);
+    --pf-v5-c-nav__link--m-current--BorderColor: var(--ni2-orange);
+}
+.pf-v5-c-nav__section-title { color: #505269; border-color: var(--ni2-border); }
+.pf-v5-c-nav__link::before { border-color: var(--ni2-border); }
+.pf-v5-c-nav__link.pf-m-current::after { border-color: var(--ni2-orange); }
+.pf-v5-c-button {
+    --pf-v5-c-button--BorderRadius: .65rem;
+    --pf-v5-c-button--m-primary--BackgroundColor: var(--ni2-accent);
+    --pf-v5-c-button--m-primary--hover--BackgroundColor: var(--ni2-accent-hover);
+    --pf-v5-c-button--m-primary--focus--BackgroundColor: var(--ni2-accent-hover);
+    --pf-v5-c-button--m-primary--active--BackgroundColor: var(--ni2-accent-hover);
+}
+.pf-v5-c-title { color: var(--ni2-navy); }
+.pf-v5-c-card { border-radius: .8rem; }
+.keycloak__loading-container { color: var(--ni2-navy); background: var(--ni2-background); }
+a:focus-visible, button:focus-visible, input:focus-visible,
+select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+    outline: 3px solid var(--ni2-navy);
+    outline-offset: 3px;
+    box-shadow: 0 0 0 3px white;
+}
+/* Do not override native danger, disabled, invalid, OTP QR or dialog states. */
+@media (max-width: 480px) {
+    .pf-v5-c-masthead__brand img { height: 38px; }
+}

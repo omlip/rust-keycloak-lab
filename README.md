@@ -1,6 +1,6 @@
 # Olaninc — démonstration IAM
 
-Une SPA **Vue / TypeScript**, une API **Rust / Axum** et **Keycloak** pour démontrer l’authentification OIDC, les rôles et les opérations IAM natives. **Mailpit** capture tous les e-mails. Le thème Login Keycloak reprend la palette Ni² par CSS, sans remplacement des formulaires natifs. Aucune base applicative et aucun endpoint d’administration IAM dans Rust.
+Une SPA **Vue / TypeScript**, une API **Rust / Axum** et **Keycloak** pour démontrer l’authentification OIDC, les rôles et les opérations IAM natives. **Mailpit** capture tous les e-mails. Les thèmes Login, Account et Admin Keycloak reprennent la palette Ni² par CSS, sans remplacement des écrans natifs. Aucune base applicative et aucun endpoint d’administration IAM dans Rust.
 
 ## Organisation du dépôt
 
@@ -13,7 +13,7 @@ catalog-services/
   frontend/         Application Vue
 cost-monitor/       Application Rust de suivi des coûts
 infrastructure/
-  keycloak/         Realm, thème Login, certificats publics et scripts Keycloak
+  keycloak/         Realm, thèmes Ni², certificats publics et scripts Keycloak
     scripts/        Configuration des clients et utilitaire Admin CLI
   active-directory/ Image et initialisation Samba Active Directory
     scripts/        Configuration de la fédération, vérification et tests
@@ -28,15 +28,38 @@ Sauf indication contraire, les commandes ci-dessous s’exécutent à la racine 
 dépôt. Depuis `catalog-services/backend/`, le secret du loader se lit avec le
 chemin `../../.secrets/catalog-loader.secret` (et non plus `../.secrets/`).
 
-## Thème Login Ni²
+## Thèmes Keycloak Ni²
 
-`infrastructure/keycloak/themes/ni2/login` hérite de `keycloak.v2` (Keycloak 26.8 / PatternFly 5). Il conserve les templates, scripts, erreurs et parcours natifs ; seuls les styles changent : bleu nuit, boutons bleus, fond gris clair et accent orange. Le nom du realm reste inchangé. Aucun thème Account, Administration ou e-mail n’est modifié.
+Le dossier `infrastructure/keycloak/themes/ni2` contient trois types de thème
+pour Keycloak 26.8.1 / PatternFly 5 :
+
+| Type | Parent natif | Personnalisation |
+| --- | --- | --- |
+| `login` | `keycloak.v2` | Connexion, mots de passe et OTP, palette bleu nuit/orange |
+| `account` | `keycloak.v3` | Profil, sécurité, sessions et applications, accents bleus |
+| `admin` | `keycloak.v2` | Administration du realm, accents prune |
+
+Seuls les styles, logos et favicons changent. Les templates, applications React,
+scripts et comportements natifs sont conservés ; aucun thème e-mail n’est modifié.
 
 Le symbole de démonstration représente deux baies de serveurs bleu nuit avec des accents orange ; ce n’est pas le logo officiel Ni². Le même SVG est utilisé comme logo et favicon dans Vue et le thème Login. Les fichiers `catalog-services/frontend/public/logo.svg` et `infrastructure/keycloak/themes/ni2/login/resources/img/logo.svg` doivent rester identiques. Le logo est décoratif à côté des titres/libellés existants, sans ajouter de texte redondant aux lecteurs d’écran.
 
-Le dossier est monté en lecture seule dans `/opt/keycloak/themes/ni2`. Les caches de thèmes sont désactivés dans cette configuration locale pour faciliter les ajustements CSS ; ce réglage n’est pas destiné à la production. Le thème couvre la connexion, les mots de passe oubliés/réinitialisés ou imposés, ainsi que la saisie/configuration OTP des parcours Login. Les écrans propres à la console Account restent natifs.
+Le dossier est déjà monté en lecture seule dans `/opt/keycloak/themes/ni2` par
+Compose. Les caches sont désactivés uniquement pour le développement local.
+Les consoles Account et Admin héritent des applications natives, avec un logo
+Ni², un en-tête blanc souligné d’orange et des styles clairs cohérents avec la démo.
 
-Sur une installation vierge, l’import sélectionne automatiquement `ni2`. Sur un realm existant, choisir **Realm settings → Themes → Login theme → ni2 → Save**, sans supprimer les volumes. Pour revenir au thème natif, sélectionner `keycloak.v2` ; les comptes et sessions ne sont pas réinitialisés. Après un changement de version Keycloak, vérifier les styles, focus, erreurs, écrans mobiles et le QR code OTP.
+Sur une installation vierge, l’import sélectionne `ni2` pour les trois types.
+Sur un realm existant, avec Keycloak démarré :
+
+```sh
+python3 infrastructure/keycloak/scripts/configure-theme.py
+```
+
+Le script modifie seulement les trois champs de thème de `olaninc`, sans toucher
+aux comptes, sessions ou au realm `master`. On peut aussi choisir `ni2` dans
+**Realm settings → Themes**. Consulter [le guide des thèmes](docs/keycloak-theme.md)
+pour le montage Docker, l’activation et le retour aux thèmes natifs.
 
 Un **catalogue fictif de services de datacenter** illustre les permissions : `users` et `admin` le consultent ; seul `admin` peut ajouter, modifier et supprimer les services. Le compte technique `catalog-loader`, avec le rôle dédié `catalog-seed`, peut uniquement charger les cinq services prédéfinis. Le catalogue est vide au démarrage et stocké uniquement en mémoire. Son cœur applicatif suit une architecture hexagonale légère.
 

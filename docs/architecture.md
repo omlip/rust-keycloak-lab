@@ -194,7 +194,17 @@ Les boutons Vue utilisent les **Application Initiated Actions** : `keycloak.logi
 
 Les deux applications partagent la même présentation d’en-tête : logo propre à l’application, nom et sous-titre à gauche, burger à droite et ligne orange Ni². Dans Catalog Services, le menu contient **Catalogue de services**, **Mes sélections**, **Paramètres** et **Déconnexion**, sur ordinateur comme sur mobile. Le header est neutre ; les fonds pâles, titres, badges et boutons métier restent bleus pour `users`, prune pour `admin`, sans bordure épaisse répétée en haut du bandeau. `/settings` regroupe les liens vers les fonctions natives de sécurité pour les deux rôles ; le lien vers la console d’administration n’apparaît que pour `admin`. Le retour des actions natives conserve la destination `/settings`. Les anciennes pages `/user` et `/admin` ne sont plus des écrans distincts : elles redirigent vers les paramètres, en conservant le contrôle `admin` sur l’ancienne URL `/admin`.
 
-Le thème Login `ni2`, monté en lecture seule depuis `infrastructure/keycloak/themes/ni2`, hérite de `keycloak.v2` et applique uniquement des surcharges CSS Ni² (PatternFly 5). Aucun template ou script natif n’est remplacé : connexion, mots de passe et OTP conservent leur comportement. Le thème reste commun à tous les rôles. La distinction bleu utilisateur / prune administrateur est réservée à Vue. Les consoles Account et Administration ainsi que les e-mails gardent leurs thèmes natifs. Les caches de thèmes sont désactivés uniquement pour le développement local.
+Le thème `ni2`, monté en lecture seule depuis `infrastructure/keycloak/themes/ni2`,
+couvre Login (`keycloak.v2`), Account (`keycloak.v3`) et Admin (`keycloak.v2`).
+Il applique uniquement des surcharges CSS Ni² et des ressources SVG sur les
+écrans natifs PatternFly 5 de Keycloak 26.8.1. Aucun template, bundle React ou
+script natif n’est remplacé : connexion, mots de passe, OTP et fonctions
+d’administration conservent leur comportement. La console Account a des accents
+bleus, la console Admin des accents prune ; cette distinction est liée au type
+de console, pas à un rôle Keycloak. Le thème Login reste commun à tous les rôles.
+Le realm `olaninc` sélectionne les trois thèmes ; `master` et les e-mails restent
+inchangés. Les caches sont désactivés uniquement pour le développement local.
+Le montage, l’activation et les limites sont décrits dans [le guide des thèmes](keycloak-theme.md).
 
 Les actions requises et flux d’authentification natifs sont ceux créés par Keycloak à l’import. Les quatre comptes locaux de démonstration n’ont ni changement de mot de passe initial imposé, ni OTP obligatoire. `demo-security` est réservé aux exercices de changement/récupération de mot de passe et d’OTP ; `demo-bruteforce` aux essais de blocage temporaire. Les mots de passe humains suivent une convention publique réservée à localhost, contrairement aux secrets techniques qui restent protégés et, pour AD, aléatoires.
 
@@ -220,7 +230,7 @@ limites sont décrits dans [le guide brute force](brute-force.md).
 - Les tests backend utilisent de vraies signatures et un faux serveur de clés ; ils ne prouvent pas à eux seuls que l’import Keycloak est correct. Le guide de scénarios couvre cette intégration.
 - Pas d’inscription libre, de politique OTP obligatoire, de formulaires IAM personnalisés, de refonte des templates, de BFF, de base applicative, d’introspection distante ou de déploiement public.
 
-Évolutions possibles après V1 : tests navigateur pérennes, inscription native Keycloak avec rôle par défaut maîtrisé, personnalisation de la console Account et durcissement pour un véritable environnement cible. Aucune de ces évolutions n’est activée implicitement.
+Évolutions possibles après V1 : tests navigateur pérennes, inscription native Keycloak avec rôle par défaut maîtrisé et durcissement pour un véritable environnement cible. Aucune de ces évolutions n’est activée implicitement.
 
 ## 9. Catalogue : une architecture hexagonale légère
 

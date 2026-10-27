@@ -1,6 +1,8 @@
 {
   "realm": "olaninc",
   "loginTheme": "ni2",
+  "accountTheme": "ni2",
+  "adminTheme": "ni2",
   "displayName": "Olaninc",
   "enabled": true,
   "sslRequired": "none",
