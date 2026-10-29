@@ -31,8 +31,12 @@ autre personne : utiliser le même compte pour son login et la délégation cata
    sélection. Même `admin1` ne peut pas consulter une sélection étrangère.
 3. `user1` connecte Cost Monitor et configure un seuil. `admin1` change les
    tarifs : e-mail de dépassement, puis e-mail de retour à la normale.
-4. Se déconnecter des applications sans retirer la délégation : les contrôles
-   offline continuent. Révoquer ensuite l’accès catalogue dans Keycloak.
+4. Se connecter au catalogue puis cliquer sur **Se connecter** dans Cost Monitor :
+   le SSO évite la ressaisie des credentials (et fonctionne dans l’autre sens).
+   Se déconnecter de Cost Monitor (logout direct par `keycloak-js`) : le prochain login
+   permet de choisir un autre compte. Sans retirer la délégation, les contrôles
+   offline continuent ; le même compte retrouve son intégration à la reconnexion.
+   Révoquer ensuite l’accès catalogue dans Keycloak.
 5. Pour la mauvaise identité, connecter Cost Monitor avec `user3`, puis choisir
    `user1` lors de la connexion catalogue. Si le SSO sélectionne automatiquement
    `user3`, utiliser un autre onglet pour changer la session SSO Keycloak, sans

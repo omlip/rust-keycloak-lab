@@ -48,18 +48,20 @@ def configure():
             for name in source['optionalClientScopes']:
                 kc.call('update', f'clients/{target}/optional-client-scopes/{scopes[name]}')
         directory = ROOT / '.secrets'
-        if directory.is_symlink() or any((directory / (name + '.secret')).is_symlink() for name in managed):
+        confidential = {name: cid for name, cid in managed.items()
+                        if not next(c for c in realm['clients'] if c['clientId'] == name)['publicClient']}
+        if directory.is_symlink() or any((directory / (name + '.secret')).is_symlink() for name in confidential):
             raise RuntimeError('Secret path must not be a symbolic link.')
         directory.mkdir(mode=0o700, exist_ok=True)
         directory.chmod(0o700)
-        for name, cid in managed.items():
+        for name, cid in confidential.items():
             value = kc.call('get', f'clients/{cid}/client-secret')['value']
             fd = os.open(directory / (name + '.secret'), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             with os.fdopen(fd, 'w') as stream:
                 os.fchmod(stream.fileno(), 0o600)
                 stream.write(value)
-    print('Cost Monitor configuré : connexion applicative sans accès API et délégation catalogue offline séparée.')
-    print('Deux secrets synchronisés dans .secrets/ (0600), sans rotation ni affichage.')
+    print('Cost Monitor configuré : SPA publique PKCE, audience API dédiée et délégation catalogue offline séparée.')
+    print('Secret catalogue synchronisé dans .secrets/ (0600), sans rotation ni affichage. Aucun secret SPA utilisé.')
     print('Reconnecter la SPA pour recevoir ses nouveaux scopes. Comptes, sessions et mots de passe conservés.')
 
 

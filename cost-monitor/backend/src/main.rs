@@ -1,6 +1,7 @@
 use cost_monitor::mail::SmtpMailer;
 use cost_monitor::{
-    oidc::{Oidc, Purpose},
+    auth::Authenticator,
+    oidc::Oidc,
     web::{self, Config},
 };
 use std::sync::Arc;
@@ -24,48 +25,32 @@ async fn main() -> Result<(), Box<dyn Error>> {
             return Err("Invalid endpoint configuration".into());
         }
     }
-    let login_path = env::var("LOGIN_CLIENT_SECRET_FILE")
-        .unwrap_or_else(|_| "../.secrets/cost-monitor-login.secret".into());
     let catalog_path = env::var("CATALOG_CLIENT_SECRET_FILE")
-        .unwrap_or_else(|_| "../.secrets/cost-monitor.secret".into());
-    let login_secret = std::fs::read_to_string(login_path)?.trim().to_owned();
+        .unwrap_or_else(|_| "../../.secrets/cost-monitor.secret".into());
     let catalog_secret = std::fs::read_to_string(catalog_path)?.trim().to_owned();
-    if login_secret.is_empty() || catalog_secret.is_empty() {
+    if catalog_secret.is_empty() {
         return Err("Empty client secret".into());
     }
     // Keycloak can become ready just before its discovery endpoint responds.
     let mut client = None;
     for _ in 0..15 {
-        let (login, catalog) = tokio::join!(
-            Oidc::discover(
-                &issuer,
-                &internal,
-                &origin,
-                login_secret.clone(),
-                Purpose::AppLogin
-            ),
-            Oidc::discover(
-                &issuer,
-                &internal,
-                &origin,
-                catalog_secret.clone(),
-                Purpose::Catalog
-            )
+        let (auth, catalog) = tokio::join!(
+            Authenticator::discover(&issuer, &internal),
+            Oidc::discover(&issuer, &internal, &origin, catalog_secret.clone())
         );
-        if let (Ok(login), Ok(catalog)) = (login, catalog) {
-            client = Some((login, catalog));
+        if let (Ok(auth), Ok(catalog)) = (auth, catalog) {
+            client = Some((auth, catalog));
             break;
         }
         tokio::time::sleep(Duration::from_secs(2)).await;
     }
-    let (login_client, catalog_client) =
-        client.ok_or("OIDC discovery failed; no credentials logged")?;
+    let (auth, catalog_client) = client.ok_or("OIDC discovery failed; no credentials logged")?;
     let listener = tokio::net::TcpListener::bind(
-        env::var("BIND_ADDRESS").unwrap_or_else(|_| "127.0.0.1:8082".into()),
+        env::var("BIND_ADDRESS").unwrap_or_else(|_| "127.0.0.1:3002".into()),
     )
     .await?;
     println!(
-        "Cost Monitor ready: independent application login and optional offline catalogue delegation."
+        "Cost Monitor ready: SPA Bearer authentication and optional offline catalogue delegation."
     );
     let mailer = Arc::new(SmtpMailer::new(
         &env::var("SMTP_HOST").unwrap_or_else(|_| "localhost".into()),
@@ -77,7 +62,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         &origin,
     )?);
     let (application, monitoring) = web::app(
-        login_client,
+        auth,
         catalog_client,
         Config {
             origin,

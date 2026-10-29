@@ -6,6 +6,8 @@ publish = false
 
 [dependencies]
 axum = "0.8"
+headers = "0.4"
+jsonwebtoken = { version = "10", default-features = false, features = ["rust_crypto"] }
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1-rustls-tls"] }
 openidconnect = { version = "4", default-features = false, features = ["reqwest", "rustls-tls"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
@@ -15,5 +17,8 @@ subtle = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal", "sync"] }
 
 [dev-dependencies]
+base64 = "0.22"
+rand = "0.8"
+rsa = "0.9"
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"

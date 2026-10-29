@@ -23,28 +23,6 @@ pub struct Oidc {
     client: Client,
     http: Backchannel,
     issuer: String,
-    purpose: Purpose,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Purpose {
-    AppLogin,
-    Catalog,
-}
-
-impl Purpose {
-    pub fn client_id(self) -> &'static str {
-        match self {
-            Self::AppLogin => "cost-monitor-login",
-            Self::Catalog => "cost-monitor",
-        }
-    }
-    pub fn callback(self) -> &'static str {
-        match self {
-            Self::AppLogin => "/oidc/login/callback",
-            Self::Catalog => "/oidc/catalog/callback",
-        }
-    }
 }
 
 // Only transport is rewritten for Docker. Discovery issuer validation, signed ID
@@ -112,7 +90,6 @@ impl Oidc {
         internal: &str,
         origin: &str,
         secret: String,
-        purpose: Purpose,
     ) -> Result<Self, OidcError> {
         let http = Backchannel {
             client: reqwest::Client::builder()
@@ -133,11 +110,11 @@ impl Oidc {
             .ok_or(OidcError::InvalidAuthorization)?;
         let client = CoreClient::from_provider_metadata(
             metadata,
-            ClientId::new(purpose.client_id().into()),
+            ClientId::new("cost-monitor".into()),
             Some(ClientSecret::new(secret)),
         )
         .set_redirect_uri(
-            RedirectUrl::new(format!("{origin}{}", purpose.callback()))
+            RedirectUrl::new(format!("{origin}/oidc/catalog/callback"))
                 .map_err(|_| OidcError::InvalidAuthorization)?,
         )
         .set_token_uri(token_uri);
@@ -145,7 +122,6 @@ impl Oidc {
             client,
             http,
             issuer: public.to_owned(),
-            purpose,
         })
     }
 
@@ -160,16 +136,11 @@ impl Oidc {
             )
             .add_scope(Scope::new("profile".into()))
             .set_pkce_challenge(challenge);
-        let request = match self.purpose {
-            // A fresh login lets the visitor choose another user even if a
-            // Keycloak SSO cookie remains after local application logout.
-            Purpose::AppLogin => request.add_extra_param("prompt", "login"),
-            Purpose::Catalog => request
-                .add_scope(Scope::new("selections:read".into()))
-                .add_scope(Scope::new("offline_access".into()))
-                .add_scope(Scope::new("email".into()))
-                .add_extra_param("prompt", "consent"),
-        };
+        let request = request
+            .add_scope(Scope::new("selections:read".into()))
+            .add_scope(Scope::new("offline_access".into()))
+            .add_scope(Scope::new("email".into()))
+            .add_extra_param("prompt", "consent");
         let (url, state, nonce) = request.url();
         Login {
             url: url.to_string(),
@@ -272,9 +243,6 @@ impl Oidc {
         verifier: PkceCodeVerifier,
         nonce: &Nonce,
     ) -> Result<(Identity, Tokens), OidcError> {
-        if self.purpose != Purpose::Catalog {
-            return Err(OidcError::InvalidAuthorization);
-        }
         let response = self
             .client
             .exchange_code(AuthorizationCode::new(code))
@@ -288,51 +256,12 @@ impl Oidc {
         Ok((identity, tokens))
     }
 
-    // Login tokens are validated then dropped. They never become catalogue
-    // credentials and are not retained as part of the local session.
-    pub async fn authenticate(
-        &self,
-        code: String,
-        verifier: PkceCodeVerifier,
-        nonce: &Nonce,
-    ) -> Result<Identity, OidcError> {
-        if self.purpose != Purpose::AppLogin {
-            return Err(OidcError::InvalidAuthorization);
-        }
-        let response = self
-            .client
-            .exchange_code(AuthorizationCode::new(code))
-            .set_pkce_verifier(verifier)
-            .request_async(&self.http)
-            .await
-            .map_err(|_| OidcError::InvalidAuthorization)?;
-        if response.scopes().is_some_and(|scopes| {
-            scopes.iter().any(|s| {
-                matches!(
-                    s.as_str(),
-                    "offline_access"
-                        | "selections:read"
-                        | "selections:write"
-                        | "catalog:read"
-                        | "catalog:write"
-                        | "catalog:seed"
-                )
-            })
-        }) {
-            return Err(OidcError::InvalidAuthorization);
-        }
-        Ok(self.verify_identity(&response, nonce, false)?.0)
-    }
-
     pub async fn refresh(
         &self,
         previous: &RefreshToken,
         nonce: &Nonce,
         subject: &str,
     ) -> Result<Tokens, OidcError> {
-        if self.purpose != Purpose::Catalog {
-            return Err(OidcError::InvalidAuthorization);
-        }
         let response = self
             .client
             .exchange_refresh_token(previous)

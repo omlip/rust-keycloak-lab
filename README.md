@@ -11,7 +11,7 @@ catalog-services/
     src/application/ Cas d’usage, acteurs et ports de stockage
     src/infrastructure/ Adaptateurs HTTP/JWT, stockage mémoire et seed
   frontend/         Application Vue
-cost-monitor/       Application Rust de suivi des coûts
+cost-monitor/       Suivi des coûts : frontend Vue + backend Rust
 infrastructure/
   keycloak/         Realm, thèmes Ni², certificats publics et scripts Keycloak
     scripts/        Configuration des clients et utilitaire Admin CLI
@@ -38,6 +38,12 @@ pour Keycloak 26.8.1 / PatternFly 5 :
 | `login` | `keycloak.v2` | Connexion, mots de passe et OTP, palette bleu nuit/orange |
 | `account` | `keycloak.v3` | Profil, sécurité, sessions et applications, accents bleus |
 | `admin` | `keycloak.v2` | Administration du realm, accents prune |
+
+Cost Monitor surcharge uniquement le type **Login** avec
+`cost-moinitor-login-theme` : une palette volontairement rouge pour distinguer
+le thème par application du thème Ni² du realm. Le catalogue et les consoles
+Account/Admin gardent Ni² ; le SSO reste partagé. Voir
+[l’activation par client](docs/keycloak-theme.md#login-rouge-par-application--cost-monitor).
 
 Seuls les styles, logos et favicons changent. Les templates, applications React,
 scripts et comportements natifs sont conservés ; aucun thème e-mail n’est modifié.
@@ -376,11 +382,18 @@ menu). Le contenu de Cost Monitor commence directement par les coûts ou le
 bouton de connexion catalogue, sans bloc « Bonjour… ».
 
 **Cost Monitor**, sur <http://localhost:8082>, possède une connexion applicative
-Keycloak distincte, sans accès API. Une fois connecté, **Connecter mon catalogue**
+Keycloak distincte, via `keycloak-js` et un client public PKCE. Son access token
+authentifie uniquement l’API Cost Monitor. Une fois connecté, **Connecter mon catalogue**
 demande séparément le consentement de lecture des sélections et l’accès offline.
 Les deux identités doivent correspondre (issuer + `sub`). L’offline token reste
 côté serveur. Les alertes par sélection sont contrôlées toutes les minutes,
 même après déconnexion du navigateur.
+
+Comme Catalog Services, il utilise **Vue / TypeScript / Vite + Rust / Axum**,
+organisés dans `cost-monitor/frontend/` et `cost-monitor/backend/`. Nginx sert Vue
+sur 8082 et relaie les API vers Rust. Comme le catalogue, la SPA garde ses jetons
+en mémoire uniquement et appelle Rust par Bearer token. La délégation offline
+reste exclusivement côté serveur, séparée du login et de ses jetons.
 
 Cliquer sur une **cloche en contour** pour définir un seuil : elle devient
 **jaune et remplie**, avec le montant affiché. La même modale permet de modifier
@@ -400,14 +413,19 @@ docker compose --profile cost-monitor up --build -d --wait
 Keycloak doit déjà être démarré pour le helper. Ajouter `--profile ad` au
 démarrage si l’annuaire configuré est utilisé. **Reconnecter la SPA** après la
 mise à niveau pour obtenir ses nouveaux scopes métier ; les anciens jetons sans
-scopes sont refusés. Les secrets techniques sont ignorés dans
-`.secrets/cost-monitor-login.secret` et `.secrets/cost-monitor.secret`.
+scopes sont refusés. Seul le client confidentiel de délégation utilise
+`.secrets/cost-monitor.secret`, ignoré par Git. Le client public de login n’utilise
+aucun secret. Pour migrer l’ancien login serveur sans modifier son thème actuel :
+`python3 infrastructure/keycloak/scripts/configure-cost-monitor-spa.py`.
 Les deux clients n’ont ni password grant ni compte de service.
 
 Voir [le guide Cost Monitor](docs/cost-monitor.md) pour le scénario de
 renouvellement après déconnexion, la révocation, les permissions, les cookies et
 les limites du stockage mémoire. **Déconnecter le catalogue** conserve le login
-Cost Monitor ; **Se déconnecter de Cost Monitor** ferme toute la session locale.
+Cost Monitor ; **Se déconnecter de Cost Monitor** annule les tentatives catalogue,
+puis `keycloak-js` termine le SSO avec son `id_token_hint`, sans confirmation dans
+le parcours normal. Le prochain login permet de saisir un autre compte. Un clic
+sur **Se connecter** réutilise la session SSO existante sans ressaisie du mot de passe.
 L’intégration catalogue est conservée séparément par compte (`issuer` + `sub`) :
 elle est retrouvée à la reconnexion du même utilisateur, pas par un autre compte.
 Seul **Déconnecter le catalogue** en supprime explicitement les jetons locaux,
@@ -423,8 +441,8 @@ Sur la machine, avec Rust récent et Node ≥ 20.19 :
 ```sh
 cargo test --locked --manifest-path catalog-services/backend/Cargo.toml
 cargo clippy --locked --manifest-path catalog-services/backend/Cargo.toml --all-targets -- -D warnings
-cargo test --locked --manifest-path cost-monitor/Cargo.toml
-cargo clippy --locked --manifest-path cost-monitor/Cargo.toml --all-targets -- -D warnings
+cargo test --locked --manifest-path cost-monitor/backend/Cargo.toml
+cargo clippy --locked --manifest-path cost-monitor/backend/Cargo.toml --all-targets -- -D warnings
 ```
 
 Dans `catalog-services/frontend/` :

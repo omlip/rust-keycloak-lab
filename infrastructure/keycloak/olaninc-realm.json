@@ -154,7 +154,7 @@
       "name": "Cost Monitor — connexion à l’application",
       "enabled": true,
       "protocol": "openid-connect",
-      "publicClient": false,
+      "publicClient": true,
       "clientAuthenticatorType": "client-secret",
       "standardFlowEnabled": true,
       "implicitFlowEnabled": false,
@@ -162,12 +162,22 @@
       "serviceAccountsEnabled": false,
       "consentRequired": false,
       "fullScopeAllowed": false,
-      "redirectUris": ["http://localhost:8082/oidc/login/callback"],
-      "webOrigins": [],
-      "attributes": { "pkce.code.challenge.method": "S256" },
+      "redirectUris": ["http://localhost:8082/", "http://localhost:8082/silent-check-sso.html"],
+      "webOrigins": ["http://localhost:8082"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:8082/",
+        "login_theme": "cost-moinitor-login-theme"
+      },
       "defaultClientScopes": ["basic", "profile"],
       "optionalClientScopes": [],
-      "protocolMappers": []
+      "protocolMappers": [
+        {
+          "name": "cost-monitor-api-audience", "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper", "consentRequired": false,
+          "config": { "included.custom.audience": "cost-monitor-api", "id.token.claim": "false", "access.token.claim": "true" }
+        }
+      ]
     },
     {
       "clientId": "cost-monitor",
@@ -186,7 +196,8 @@
       "webOrigins": [],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "access.token.lifespan": "60"
+        "access.token.lifespan": "60",
+        "login_theme": "cost-moinitor-login-theme"
       },
       "defaultClientScopes": ["basic", "profile", "email", "selections:read"],
       "optionalClientScopes": ["offline_access"],

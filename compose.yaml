@@ -17,6 +17,7 @@ services:
       - keycloak-data:/opt/keycloak/data
       - ./infrastructure/keycloak/olaninc-realm.json:/opt/keycloak/data/import/olaninc-realm.json:ro
       - ./infrastructure/keycloak/themes/ni2:/opt/keycloak/themes/ni2:ro
+      - ./infrastructure/keycloak/themes/cost-moinitor-login-theme:/opt/keycloak/themes/cost-moinitor-login-theme:ro
       - ./infrastructure/keycloak/truststores:/opt/keycloak/conf/truststores:ro
     depends_on:
       mailpit:
@@ -77,16 +78,13 @@ services:
 
   cost-monitor:
     profiles: ["cost-monitor"]
-    build:
-      context: .
-      dockerfile: cost-monitor/Dockerfile
+    build: ./cost-monitor/backend
     environment:
       BIND_ADDRESS: 0.0.0.0:8082
       PUBLIC_ORIGIN: http://localhost:8082
       OIDC_ISSUER: http://localhost:8081/realms/olaninc
       OIDC_INTERNAL_ISSUER: http://keycloak:8080/realms/olaninc
       API_BASE: http://backend:3000
-      LOGIN_CLIENT_SECRET_FILE: /run/secrets/cost-monitor-login.secret
       CATALOG_CLIENT_SECRET_FILE: /run/secrets/cost-monitor.secret
       SMTP_HOST: mailpit
       SMTP_PORT: "1025"
@@ -95,11 +93,8 @@ services:
       ALLOW_UNVERIFIED_ALERT_EMAIL: "true"
     volumes:
       - ./.secrets/cost-monitor.secret:/run/secrets/cost-monitor.secret:ro
-      - ./.secrets/cost-monitor-login.secret:/run/secrets/cost-monitor-login.secret:ro
     tmpfs:
       - /run/cost-monitor
-    ports:
-      - "127.0.0.1:8082:8082"
     depends_on:
       keycloak:
         condition: service_healthy
@@ -110,6 +105,20 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+
+  cost-monitor-frontend:
+    profiles: ["cost-monitor"]
+    build: ./cost-monitor/frontend
+    ports:
+      - "127.0.0.1:8082:8080"
+    depends_on:
+      cost-monitor:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   ad:
     profiles: ["ad"]

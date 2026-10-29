@@ -403,12 +403,17 @@ du champ e-mail ou du sujet technique. Cost Monitor n’affiche plus de carte
 « Bonjour… » ; seules une carte de connexion catalogue si nécessaire et les
 données métier occupent son contenu principal.
 
-Cost Monitor est un serveur Axum distinct, avec des pages HTML rendues côté
-serveur et une session opaque dans le navigateur. Son premier client Keycloak,
-`cost-monitor-login`, authentifie uniquement l’utilisateur (`openid profile`,
-sans audience API ni offline). Ses jetons sont validés puis abandonnés : la
-session locale ne conserve que l’identité. Le tableau de bord est utilisable
-sans connexion catalogue.
+Cost Monitor utilise la même stack Vue 3 / TypeScript / Vite + Rust / Axum que
+Catalog Services, avec `cost-monitor/frontend/` et `cost-monitor/backend/`.
+Nginx sert la SPA sur le port public 8082 et relaie le JSON et les parcours OIDC
+vers le service Rust interne `cost-monitor:8082`, non publié sur l’hôte.
+Comme Catalog Services, cette SPA utilise `keycloak-js`, Authorization Code +
+PKCE S256 et des jetons online uniquement en mémoire JavaScript. Son premier
+client Keycloak, `cost-monitor-login`, est public (`openid profile`, sans offline)
+et donne seulement l’audience `cost-monitor-api`. Rust valide à chaque appel le
+Bearer signé RS256, issuer, audience, expiration/nbf, sujet, `sid`, `typ=Bearer`
+et `azp=cost-monitor-login`. Aucun cookie ne permet de s’authentifier à l’API.
+Le tableau de bord est utilisable sans connexion catalogue.
 
 Le bouton **Connecter mon catalogue** lance un second parcours avec le client
 `cost-monitor`, consentement de lecture, `email` et `offline_access`. Cost Monitor ne lit
@@ -416,31 +421,38 @@ jamais le repository des sélections : il appelle leur API avec ce second access
 token. Les réponses restent filtrées par la règle métier de propriété.
 
 ```text
-Navigateur ── cookie de session opaque ──→ Cost Monitor :8082
+Navigateur Vue ── Bearer online ──→ Nginx :8082 ──→ Rust cost-monitor:8082
     │                                        │
     ├── login Cost Monitor ──────────────→ Keycloak (cost-monitor-login)
     └── consentement catalogue ─────────→ Keycloak (cost-monitor)
-Cost Monitor ── deux codes/PKCE/secrets distincts ──┘
+Vue/keycloak-js ── code + PKCE public ───────────┘
+Rust ── code + PKCE + secret catalogue ──────────┘
 Cost Monitor ── offline token catalogue → access token ──┘
 Cost Monitor ── access token utilisateur ──→ API Rust /api/selections
 Cost Monitor ── alertes métier SMTP ───────→ Mailpit:1025
 ```
 
-Le module OIDC s’appuie sur `openidconnect` pour le protocole et la validation
-des ID tokens. Le module `sessions` conserve uniquement les identités, CSRF et
-délais des sessions navigateur. Le module `integrations` conserve séparément
+Le module `auth` valide les Bearer avec `jsonwebtoken` et les JWKS du fournisseur.
+Le module OIDC s’appuie sur `openidconnect` pour la délégation et la validation
+des ID tokens catalogue. Le module `sessions` conserve des contextes d’annulation
+par `sid` vérifié et les tentatives catalogue de cinq minutes, pas un login par cookie.
+Le module `integrations` conserve séparément
 les connexions catalogue, indexées par **issuer + sub**, sans dépendre d’une
 session. Chaque compte possède un verrou de renouvellement commun à toutes ses
 sessions, ainsi qu’un nonce, ses jetons, une expiration d’access token et un
 compteur. Les deux stockages restent bornés et en mémoire. La fermeture ou
 l’expiration d’une session ne supprime pas l’intégration : une nouvelle session
 du même compte la retrouve, mais un autre compte ne peut pas la consulter.
-Les deux secrets techniques viennent de fichiers protégés,
-jamais du navigateur. L’adaptateur web gère cookies, CSRF, état OIDC et affichage.
+Le seul secret catalogue vient d’un fichier protégé, jamais du navigateur.
+L’adaptateur web gère Bearer, origine exacte, état OIDC, cookie temporaire de liaison
+et JSON. Le client public de login ne reçoit ni n’utilise de secret.
 
-Les callbacks et cookies temporaires des deux parcours sont distincts. Le
-retour catalogue doit retrouver la session locale qui l’a initié et le même
-issuer et `sub` que le login applicatif. La comparaison est portée par les modèles
+Le login revient sur `/` dans Vue ; le callback catalogue est traité par Rust.
+Le retour catalogue ne fait que mettre le code en attente, sans échange ni
+attachement. Après restauration du login online par `check-sso`, Vue appelle une
+complétion POST avec son Bearer. Ce retour doit retrouver le `sid` initiateur,
+son contexte non annulé et les mêmes issuer et `sub`. Le cookie de liaison seul
+n’authentifie jamais cette complétion. La comparaison est portée par les modèles
 de session et d’intégration, pas uniquement par le handler HTTP. Un compte
 différent est refusé sans changer le login ou conserver ses jetons. Une génération
 commune au compte est vérifiée avant et après l’échange réseau : une suppression
@@ -457,20 +469,28 @@ l’offline token ; une révocation du consentement client dans Keycloak bloque
 les renouvellements suivants. Aucun jeton offline ne sert de credential direct
 à l’API. **Déconnecter le catalogue** dans Cost Monitor efface cette connexion
 mais conserve le login applicatif. **Se déconnecter de Cost Monitor** ferme la
-session navigateur et annule ses tentatives de connexion, mais conserve
-l’intégration du compte. Une suppression catalogue, elle, s’applique à toutes les
+session navigateur et annule ses tentatives de connexion, puis `keycloak-js`
+déconnecte Keycloak avec son ID token hint, sans confirmation dans le parcours
+normal, mais conserve l’intégration du compte.
+Une suppression catalogue, elle, s’applique à toutes les
 sessions de ce compte. Aucune action locale ne
 prétend révoquer le consentement distant. La révocation catalogue rend cette
 intégration inutilisable mais ne déconnecte pas l’utilisateur de Cost Monitor.
-Le login utilise `prompt=login` (choix d’un autre compte via les formulaires
-natifs), tandis que la connexion catalogue utilise `prompt=consent` et peut
-réutiliser le SSO. Aucun backchannel logout applicatif n’est ajouté ici.
+Après clic sur **Se connecter**, le login réutilise le SSO sans `prompt=login` ;
+la délégation catalogue conserve `prompt=consent` et le contrôle `issuer` + `sub`.
+Le logout utilise l’adaptateur officiel, `id_token_hint` et le retour exact
+`http://localhost:8082/`, comme le catalogue. Le POST Rust `/api/logout` annule les
+tentatives au mieux, mais ne bloque pas le logout Keycloak si l’API est indisponible.
+L’ID token est conservé uniquement en mémoire Vue jusqu’à cette navigation.
+Les JWT déjà émis aux autres fenêtres peuvent rester utilisables jusqu’à leur
+expiration ; aucun backchannel logout applicatif n’est ajouté ici.
+Les alertes offline continuent sans dépendre du refresh token de la SPA.
 
 Les capacités du cœur ne sont pas des rôles Keycloak : `application::access::Actor` est
 construit à la frontière depuis des claims signés, avec intersection des scopes,
 rôles et permissions maximales du client `azp`. `cost-monitor` est plafonné à
 `SelectionsRead`, `catalog-loader` à `CatalogSeed` et la SPA aux opérations
-interactives autorisées par le rôle. `cost-monitor-login` n’a aucune capacité API,
+interactives autorisées par le rôle. `cost-monitor-login` n’a aucune capacité API catalogue,
 même en cas de jeton mal configuré portant une audience ou des scopes excessifs.
 Les clients/scopes absents ou inconnus
 échouent en mode fermé. Le scope `offline_access` ne donne aucune capacité.
@@ -494,9 +514,16 @@ sélections supprimées sont retirées à la prochaine lecture réussie.
 Le destinataire vient exclusivement des claims d’un ID token catalogue validé.
 Une adresse vérifiée est requise par défaut ; Compose contient une exception
 explicite pour les adresses AD fictives capturées par Mailpit. Les notifications
-métier ne passent jamais par l’administration Keycloak. Les cloches ouvrent des
-modales natives avec un petit script externe de même origine, sans JavaScript
-inline. Une déconnexion catalogue suspend les contrôles, mais conserve les seuils.
+métier ne passent jamais par l’administration Keycloak. Les composants Vue ouvrent
+des modales natives `<dialog>` ; l’ancien rendu HTML et `/dialogs.js` sont supprimés.
+Le tableau de bord JSON ne contient aucun jeton OIDC ; montants et identifiants
+`u64` sont transmis en chaînes décimales, avec calculs `BigInt` dans Vue.
+Les POST exigent Bearer et origine exacte ; la SPA et son JSON sont de même origine,
+sans CORS permissif. Le CORS Keycloak est limité à l’origine SPA exacte. La CSP
+autorise les connexions et iframes OIDC vers Keycloak, sans script/style inline.
+Seule la page de contrôle SSO silencieux peut être encapsulée par sa propre origine.
+Une déconnexion catalogue
+suspend les contrôles, mais conserve les seuils.
 Un redémarrage de Cost Monitor perd tout cet état mémoire ; aucune garantie
 durable de livraison exactement une fois n’est revendiquée.
 

@@ -91,6 +91,67 @@ La console <http://localhost:8081/admin/master/console/> conserve son thème nat
 même si un administrateur de `master` y sélectionne ensuite le realm `olaninc`.
 Pour voir la personnalisation, utiliser l’URL directe de la console `olaninc`.
 
+## Login rouge par application : Cost Monitor
+
+Le thème **`cost-moinitor-login-theme`** (orthographe volontairement conservée)
+est une variante **Login uniquement**, indépendante de `ni2`, héritant directement
+de `keycloak.v2`. Sa palette rouge, son logo rack/pièces et son titre « Cost Monitor »
+illustrent la surcharge par application dans le **même realm**, sans changer le SSO.
+Les messages FR/EN personnalisent le titre, pas le nom du realm. Les formulaires,
+erreurs, mots de passe, OTP et consentements restent natifs ; aucun template ni
+JavaScript n’est remplacé. Les consoles Account/Admin et les e-mails ne changent pas.
+
+Compose monte aussi ce dossier en lecture seule :
+
+```yaml
+services:
+  keycloak:
+    volumes:
+      - ./infrastructure/keycloak/themes/cost-moinitor-login-theme:/opt/keycloak/themes/cost-moinitor-login-theme:ro
+```
+
+Sur une installation vierge, l’import configure l’attribut `login_theme` des clients :
+
+| Client | Thème Login |
+| --- | --- |
+| `olaninc-spa` | `ni2`, hérité du realm |
+| `cost-monitor-login` | `cost-moinitor-login-theme` |
+| `cost-monitor` | `cost-moinitor-login-theme`, notamment pour le consentement catalogue |
+
+Pour une installation existante, ajouter le montage puis recréer **seulement**
+Keycloak en conservant son volume de données et appliquer la surcharge :
+
+```sh
+docker compose up -d --no-deps --wait keycloak
+python3 infrastructure/keycloak/scripts/configure-cost-monitor-theme.py
+```
+
+Le helper vérifie le thème et les deux clients avant toute écriture. Il ne modifie
+que leurs attributs `login_theme`, en préservant les autres attributs (PKCE,
+retours de logout, durée des jetons), les secrets et les réglages du realm.
+Le helper général `configure-cost-monitor.py` reprend aussi ces valeurs depuis
+l’import JSON. `configure-theme.py` configure toujours les thèmes du realm, sans
+supprimer ces surcharges client.
+
+Le tableau décrit la configuration déclarée dans le dépôt. Si les thèmes du realm
+ont été changés manuellement (par exemple vers les thèmes natifs), le helper Cost
+Monitor les conserve : il ne réactive pas Ni² pour le catalogue ou les consoles.
+
+Pour la démonstration, utiliser deux profils de navigateur sans session SSO :
+ouvrir **Se connecter** dans le catalogue (Ni² bleu/orange), puis dans Cost Monitor
+(rouge). Avec une session SSO existante, le formulaire est normalement sauté ;
+le consentement catalogue explicite permet encore de voir le thème rouge.
+Les autres écrans du type Login peuvent également utiliser cette variante.
+La confirmation de logout peut apparaître si aucun ID token hint valide n’est
+fourni ; le logout normal de Cost Monitor utilise maintenant `keycloak-js` et
+saute cette confirmation. Cette variante ne remplace pas les
+consoles Account/Admin ni l’interface de l’application Cost Monitor.
+
+Pour revenir à Ni², effacer **Login theme** dans les réglages de chacun des deux
+clients (attribut `login_theme`) afin de retrouver le thème du realm. Pour rendre
+ce retour durable, retirer aussi ces deux attributs du JSON d’import. Modifier
+seulement le thème du realm ne supprime pas une surcharge par client.
+
 ## Revenir aux thèmes natifs
 
 Dans **Realm settings → Themes**, sélectionner :
